@@ -144,7 +144,9 @@ describe("the tail of the sign-in", () => {
       { status: "starting" },
       { status: "waiting", url: "https://x", code: "ABCD" },
       { status: "verifying" },
-      { status: "waiting", preflight: { text: "Claude is signed out" } },
+      // Advice riding along WITH a live code is still a live flow -- `waiting`
+      // is what says so, not the advice.
+      { status: "waiting", code: "ABCD", preflight: { reason: "off", steps: ["x"] } },
     ]) {
       const h = boot();
       session(h, "claude");
@@ -156,12 +158,50 @@ describe("the tail of the sign-in", () => {
 
   // A flow that ends without connecting must hand the offer back, or the card
   // says "Signing in…" forever over an account nobody is signing in to.
-  it("gives the offer back when the flow fails", () => {
-    const h = boot();
-    session(h, "claude");
-    providers(h, [lapsed("claude")]);
-    flow(h, { status: "verifying" });
-    flow(h, { status: "failed", message: "That code expired" });
+  //
+  // The `preflight` frames are the ones that got this wrong. Codex sign-in on
+  // a cloud workspace needs an account setting turned on first, so the host
+  // sends that advice ONCE with nothing started -- and then copies it onto
+  // every later frame of the real flow, terminal ones included. A liveness
+  // test that counted `preflight` left the card stuck on both (review).
+  it("gives the offer back on every way a flow can end", () => {
+    for (const device of [
+      { status: "failed", message: "That code expired" },
+      { status: "unavailable", message: "Turn device authorization on", preflight: { reason: "off", steps: ["x"] } },
+      { status: "failed", message: "That code expired", preflight: { reason: "off", steps: ["x"] } },
+      { status: "done" },
+    ]) {
+      const h = boot();
+      session(h, "codex");
+      providers(h, [lapsed("codex")]);
+      dispatch(h.window, {
+        type: "onboarding", state: "codex-login", provider: "codex", device: { status: "verifying" },
+      } as any);
+      expect(card(h)!.querySelector("button")).toBeNull();
+      dispatch(h.window, {
+        type: "onboarding", state: "codex-login", provider: "codex", device,
+      } as any);
+      expect(card(h)!.querySelector("button"), JSON.stringify(device)).not.toBeNull();
+    }
+  });
+
+  // The very first tap on Codex from a cloud workspace: advice, and nothing
+  // running. Owning the card at that point costs the reader the only button on
+  // the page that starts the sign-in they just asked for.
+  it("keeps offering the sign-in when the first tap only returned advice", () => {
+    const h = boot({ remote: true, caps: { remoteAgentSignIn: true } });
+    session(h, "codex");
+    providers(h, [lapsed("codex")]);
+    dispatch(h.window, {
+      type: "onboarding",
+      state: "codex-login",
+      provider: "codex",
+      device: {
+        status: "unavailable",
+        message: "Codex device authorization is off for this account",
+        preflight: { reason: "off by default", steps: ["Open the ChatGPT settings"] },
+      },
+    } as any);
     expect(card(h)!.querySelector("button")).not.toBeNull();
   });
 

@@ -12562,11 +12562,17 @@
     // closes the moment the code is submitted, but verifying it takes a second
     // or two -- and the card underneath went straight back to "Sign in", which
     // reads as "that did not work, try again" at the exact moment it IS working
-    // (owner, from a phone, 2026-09-14). Same liveness test the connect panel
-    // uses to decide the wizard owns the flow.
-    const device = state.deviceLoginByProvider[provider];
-    const signingIn = !!device && (device.status === "starting" || device.status === "waiting"
-      || device.status === "verifying" || !!device.preflight);
+    // (owner, from a phone, 2026-09-14).
+    //
+    // STATUS ONLY. The connect panel's liveness test also counts `preflight`,
+    // and copying that here was wrong: it answers "does the wizard own the
+    // panel", not "is a sign-in running". Codex preflight advice rides along on
+    // EVERY later frame of the flow (sidebar.ts, `entry.send`) including
+    // `failed`, and the first Codex tap on a cloud workspace is preflight with
+    // nothing started at all -- so the card said "Signing in…" with no way back
+    // to the button, over an account nobody was signing in to (review, round 1).
+    const status = (state.deviceLoginByProvider[provider] || {}).status;
+    const signingIn = status === "starting" || status === "waiting" || status === "verifying";
     el.replaceChildren();
     const title = document.createElement("p");
     title.className = "provider-signin-title";
