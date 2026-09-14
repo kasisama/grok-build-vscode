@@ -65,6 +65,31 @@ function selectOptions(option: any): any[] {
   return Array.isArray(option?.options) ? option.options : [];
 }
 
+/** The picker shows the DESCRIPTION's lead when it is a fuller spelling of the
+ *  name (`modelPickerLabel`) — which is how Codex's rows read "6 Astra" rather
+ *  than "GPT-6". Claude's Opus row breaks that: measured 2026-09-14, its name
+ *  is "Opus 5" and its description "Opus 5 with 1M context · Best for everyday,
+ *  complex tasks", so the fuller-spelling rule promoted a CAPABILITY qualifier
+ *  into the model's name and the composer chip read "Opus 5 with 1M context".
+ *  Every sibling row is `<name> · <blurb>`; this one row is not, so the fix
+ *  belongs here rather than in the shared label rule that Codex depends on. */
+export function claudeModelDescription(description: unknown): string | undefined {
+  if (typeof description !== "string") return undefined;
+  return description.replace(/\s+with\s+\d+(?:\.\d+)?[KM]\s+context\b/i, "");
+}
+
+/** The vendor's "Default (recommended)" row. Dropped from the picker: its own
+ *  description names the model it resolves to ("Opus (1M context)"), so it sits
+ *  in a list of models as a second, differently-named way to pick one that is
+ *  already there — and the picker is for choosing a model, not a policy.
+ *
+ *  Kept when it is the CURRENT value, because a session really can be on it
+ *  (it is the value a fresh Claude install carries) and a row that is selected
+ *  but absent leaves the picker with nothing checked and the composer chip
+ *  reading the raw id. Nothing else restores it: moving off it is one-way
+ *  inside this picker, and `claude`'s own `/model` is the way back. */
+const CLAUDE_DEFAULT_MODEL_ID = "default";
+
 /** session/new returns configOptions, not the models envelope the host picker reads. */
 export function modelsFromClaudeConfigOptions(configOptions: any): { currentModelId?: string; availableModels: any[] } {
   const options = Array.isArray(configOptions) ? configOptions : [];
@@ -80,10 +105,11 @@ export function modelsFromClaudeConfigOptions(configOptions: any): { currentMode
     availableModels: selectOptions(model).flatMap((entry) => {
       const modelId = typeof entry?.value === "string" ? entry.value : "";
       if (!modelId) return [];
+      if (modelId === CLAUDE_DEFAULT_MODEL_ID && currentModelId !== CLAUDE_DEFAULT_MODEL_ID) return [];
       return [{
         modelId,
         name: typeof entry?.name === "string" && entry.name.trim() ? entry.name : modelId,
-        description: typeof entry?.description === "string" ? entry.description : undefined,
+        description: claudeModelDescription(entry?.description),
         _meta: {
           supportsReasoningEffort: effortValues.length > 0,
           reasoningEfforts: effortValues.map((value) => ({ value })),
