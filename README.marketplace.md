@@ -59,7 +59,7 @@ Type `/imagine <prompt>` (or `/imagine-video <prompt>`) and the result renders *
 <details>
 <summary><strong>Voice control</strong> — hands-free dictation with live transcription</summary>
 
-The **microphone button** dictates speech via [SpaceXAI's Speech-to-Text API](https://docs.x.ai/developers/model-capabilities/audio/speech-to-text) — words appear live as you talk. Say **"grok send"** to submit hands-free and keep dictating; messages spoken while Grok responds queue and flush when it finishes.
+The **microphone button** dictates speech through [xAI's](https://docs.x.ai/developers/model-capabilities/audio/speech-to-text) or OpenAI's speech-to-text — words appear live as you talk. Say **"grok send"** to submit hands-free and keep dictating; messages spoken while Grok responds queue and flush when it finishes.
 
 Use your existing Grok sign-in or an OpenAI API key. Auto prefers OpenAI for Codex and xAI for Grok/Claude, with credential-based fallback. Local recording requires [`ffmpeg`](https://ffmpeg.org). Setup, devices, and costs: **[docs/voice-setup.md](https://github.com/phuryn/grok-build-vscode/blob/main/docs/voice-setup.md)**.
 
@@ -148,7 +148,7 @@ When Grok runs a Deep Research, Workflow, or Goal task, a progress card streams 
 <details>
 <summary><strong>Context & cost</strong> — what's in the window, and what the turns actually bill</summary>
 
-Click the **context donut** for `used / window (%)` — said in thousands, with the exact count still on the donut's own tooltip — plus what the conversation has **billed** — input, cache read, output, and the CLI-reported **USD cost** — as a session total and a per-turn split with its model calls. **Compact conversation** lives here too, right next to the number that tells you when you need it.
+Click the **context donut** for `used / window (%)` — said in thousands, with the exact count still on the donut's own tooltip — plus what the conversation has **billed** — input, cache read, output, and the CLI-reported **USD cost** — as a session total and a per-turn split with its model calls. **Compact conversation** lives here too, right next to the number that tells you when you need it. The same popover answers the other usage question — **how much of your plan's window is left**, as labelled windows with a meter, a reset time, and when the reading was taken. Grok asks the account, Codex reads what Codex itself records, and Claude's arrives with your next reply.
 
 ![The context popover — window usage, billed totals, and Compact](https://raw.githubusercontent.com/phuryn/grok-build-vscode/main/docs/screenshots/context.png)
 
