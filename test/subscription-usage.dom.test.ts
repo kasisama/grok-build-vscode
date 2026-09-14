@@ -10,11 +10,61 @@ const open = (h: ReturnType<typeof bootWebview>) => {
   click(h.window, h.doc.getElementById("donut")!);
   return h.doc.getElementById("context-popover")!;
 };
+/**
+ * What a host that KNOWS this frame does at session start, empty or not:
+ * `startSession` binds the account and publishes straight away. The section is
+ * gated on that frame having arrived, so a test that skips it is testing an old
+ * host without meaning to.
+ */
+const started = (h: ReturnType<typeof bootWebview>, provider: string) => {
+  dispatch(h.window, { type: "session", provider, models: [], currentModelId: "model" } as any);
+  dispatch(h.window, { type: "subscriptionUsage", windows: [] } as any);
+};
 
 describe("subscription usage in the context popover", () => {
+  /**
+   * The phone's client is always as new as the relay deploy while the host is
+   * whatever the person installed, so this section meets hosts that have never
+   * heard of `subscriptionUsage`. Those drop `refreshSubscriptionUsage` in
+   * silence, and an ungated section then promised a Claude user numbers after a
+   * reply that could not produce them (review, 2026-09-14).
+   */
+  it("says nothing at all on a host that has never sent the frame", () => {
+    const h = bootWebview();
+    dispatch(h.window, { type: "session", provider: "claude", models: [], currentModelId: "model" } as any);
+    const pop = open(h);
+    expect(pop.hidden).toBe(false);
+    expect(pop.querySelector(".subscription-usage")).toBeNull();
+    expect(pop.textContent).not.toContain("Subscription usage");
+    expect(pop.textContent).not.toContain("next reply");
+    // The rest of the popover is this host's own accounting and still paints.
+    expect(pop.querySelector('.context-fullness[aria-label="Context used"]')).not.toBeNull();
+  });
+
+  // A host that knows the frame sends it even with nothing observed, so the
+  // deliberate empty states are not collateral of the gate above.
+  it("appears as soon as that frame arrives, empty windows included", () => {
+    const h = bootWebview();
+    dispatch(h.window, { type: "session", provider: "claude", models: [], currentModelId: "model" } as any);
+    expect(open(h).querySelector(".subscription-usage")).toBeNull();
+    dispatch(h.window, { type: "subscriptionUsage", windows: [] } as any);
+    expect(h.doc.getElementById("context-popover")!.querySelector(".subscription-usage")!.textContent)
+      .toContain("Fills in after the next reply.");
+  });
+
+  // The host's capability does not change under a running client, and a new
+  // conversation clears the windows rather than the knowledge of the frame.
+  it("does not un-learn the frame when a new conversation starts", () => {
+    const h = bootWebview();
+    started(h, "claude");
+    expect(open(h).querySelector(".subscription-usage")).not.toBeNull();
+    dispatch(h.window, { type: "session", provider: "claude", models: [], currentModelId: "model" } as any);
+    expect(h.doc.getElementById("context-popover")!.querySelector(".subscription-usage")).not.toBeNull();
+  });
+
   it.each(["grok", "claude", "codex"] as const)("%s with no data has a visible, deliberate empty state without a subscription meter", (provider) => {
     const h = bootWebview();
-    dispatch(h.window, { type: "session", provider, models: [], currentModelId: "model" } as any);
+    started(h, provider);
     const pop = open(h);
     expect(pop.hidden).toBe(false);
     expect(pop.querySelector(".subscription-usage")?.textContent).toMatch(/No subscription usage reported yet\.|Fills in after the next reply\./);
@@ -28,14 +78,14 @@ describe("subscription usage in the context popover", () => {
   // broken one on the surface where waiting is the whole answer.
   it("tells a Claude user the number arrives with the next reply", () => {
     const h = bootWebview();
-    dispatch(h.window, { type: "session", provider: "claude", models: [], currentModelId: "model" } as any);
+    started(h, "claude");
     expect(open(h).querySelector(".subscription-usage")!.textContent)
       .toContain("Fills in after the next reply.");
   });
 
   it.each(["grok", "codex"] as const)("does not promise %s a reply that is not what fills it", (provider) => {
     const h = bootWebview();
-    dispatch(h.window, { type: "session", provider, models: [], currentModelId: "model" } as any);
+    started(h, provider);
     const text = open(h).querySelector(".subscription-usage")!.textContent!;
     expect(text).toContain("No subscription usage reported yet.");
     expect(text).not.toContain("next reply");

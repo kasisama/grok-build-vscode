@@ -637,6 +637,9 @@
     lastTurnUsage: null, // last prompt's billing split (#53), for the donut popover
     sessionUsage: null, // session-cumulative billing — summed by the host, not grok
     subscriptionWindows: [], // latest account capacity; never part of the transcript
+    // Whether this HOST has ever sent `subscriptionUsage`. A host property, not
+    // a session one, so a new conversation does not un-learn it.
+    subscriptionUsageKnown: false,
     // Structured session/info addends, bound to the `used` they arrived with.
     // Occupancy-only frames keep this; an open popover re-fetches session/info.
     contextBreakdown: null,
@@ -2312,7 +2315,23 @@
       subscription.appendChild(row);
     }
     if (windows.length && state.activeProvider === "claude") note("Latest reported window; other limits may apply.");
-    contextPopover.appendChild(subscription);
+    // CAPABILITY DETECTION: did the frame that feeds this section ever arrive?
+    //
+    // The phone's client is always as new as the relay deploy while the host is
+    // whatever the person installed, so this section meets hosts that never
+    // heard of `subscriptionUsage`. Those drop `refreshSubscriptionUsage` in
+    // silence, and the section then sat there promising numbers that could not
+    // come -- telling a Claude user to wait for a reply that cannot fill it
+    // (review, 2026-09-14). A host that DOES know the frame sends it at session
+    // start with empty windows, so its arrival is the honest test and the
+    // deliberate empty states above survive it.
+    //
+    // The gate is on the APPEND, not an early return: the two lines that make
+    // this popover visible are the last thing the function does, and the
+    // comment further down records what returning early from here cost last
+    // time. Building a handful of detached nodes and dropping them is the
+    // cheaper mistake.
+    if (state.subscriptionUsageKnown) contextPopover.appendChild(subscription);
 
     // KNOWLEDGE WORK STOPS HERE: the numbers and the action on them, nothing
     // else. Context occupancy and account capacity both answer "can I keep
@@ -18629,6 +18648,7 @@
         if (msg.meta?.totalTokens != null) updateDonut(msg.meta.totalTokens);
         break;
       case "subscriptionUsage":
+        state.subscriptionUsageKnown = true;
         state.subscriptionWindows = Array.isArray(msg.windows) ? msg.windows : [];
         if (!contextPopover.hidden) renderContextPopover();
         break;

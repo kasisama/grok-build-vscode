@@ -728,6 +728,10 @@ describe("context popover respects the app purpose", () => {
       messageTokens: 12166,
       freeTokens: 495983,
     } as never);
+    // What a host that knows `subscriptionUsage` does at session start, empty
+    // or not. The section is gated on that frame having arrived, so omitting it
+    // would make this a test about an OLD host instead of about the purpose.
+    dispatch(h.window, { type: "subscriptionUsage", windows: [] } as never);
     click(h.window, h.doc.getElementById("donut")!);
     return h.doc.getElementById("context-popover")!;
   };
