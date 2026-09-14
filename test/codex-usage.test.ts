@@ -173,13 +173,52 @@ describe("readCodexSubscriptionWindows", () => {
   it("takes the newest rollout that carries a snapshot", () => {
     const fs = fakeFs({
       [rollout("2026/09/13", "2026-09-13T21-15-59")]:
-        `x\n${tokenCount({ primary: { used_percent: 10, window_minutes: 10080, resets_at: 1789818344 } })}`,
+        `x\n${tokenCount({ primary: { used_percent: 10, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-09-13T21:43:32.623Z")}`,
       [rollout("2026/09/14", "2026-09-14T00-35-59")]:
-        `x\n${tokenCount({ primary: { used_percent: 44, window_minutes: 10080, resets_at: 1789818344 } })}`,
+        `x\n${tokenCount({ primary: { used_percent: 44, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-09-14T01:02:03.000Z")}`,
     });
     const [window] = readCodexSubscriptionWindows({ codexHome: path.join("/home", ".codex"), fs });
     expect(window.usedPercent).toBe(44);
-    expect(fs.tails).toHaveLength(1);
+  });
+
+  /** Measured in a real `~/.codex` on 2026-09-13, names and figures both. A
+   *  rollout is named when its session STARTS and appended to until it ends, so
+   *  a session begun at 23:51 was still writing at 00:51 the next morning while
+   *  a session begun at 23:58 had already stopped at 22:27. Taking the
+   *  later-NAMED file published 41% as the current account figure when Codex
+   *  had recorded 55% — understated by fourteen points, and nothing on screen
+   *  says so, because "Observed …" faithfully reports the stale event's time. */
+  it("believes the newest EVENT, not the newest filename", () => {
+    const fs = fakeFs({
+      [rollout("2026/09/13", "2026-09-13T23-58-16")]:
+        `x\n${tokenCount({ primary: { used_percent: 41, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-09-13T22:27:00.733Z")}`,
+      [rollout("2026/09/13", "2026-09-13T23-51-19")]:
+        `x\n${tokenCount({ primary: { used_percent: 55, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-09-14T00:51:12.297Z")}`,
+    });
+    const [window] = readCodexSubscriptionWindows({ codexHome: "/home/.codex", fs });
+    expect(window.usedPercent).toBe(55);
+    expect(window.observedAt).toBe("2026-09-14T00:51:12.297Z");
+    // Which costs reading both, since the second one's freshness is only
+    // knowable after it has been read.
+    expect(fs.tails).toHaveLength(2);
+  });
+
+  // Same mechanism one directory up: a session that starts before midnight and
+  // runs past it writes its newest event into the OLDER day's tree.
+  it("crosses a day boundary the same way, by event and not by folder", () => {
+    const fs = fakeFs({
+      [rollout("2026/09/14", "2026-09-14T09-00-00")]:
+        `x\n${tokenCount({ primary: { used_percent: 7, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-09-14T09:01:00.000Z")}`,
+      [rollout("2026/09/13", "2026-09-13T23-51-19")]:
+        `x\n${tokenCount({ primary: { used_percent: 55, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-09-14T10:00:00.000Z")}`,
+    });
+    expect(readCodexSubscriptionWindows({ codexHome: "/home/.codex", fs })[0].usedPercent).toBe(55);
   });
 
   // The session the user is sitting in has written nothing yet — which is
@@ -196,9 +235,11 @@ describe("readCodexSubscriptionWindows", () => {
   it("crosses a month and a year boundary in the right direction", () => {
     const fs = fakeFs({
       [rollout("2025/12/31", "2025-12-31T23-59-00")]:
-        `x\n${tokenCount({ primary: { used_percent: 99, window_minutes: 10080, resets_at: 1789818344 } })}`,
+        `x\n${tokenCount({ primary: { used_percent: 99, window_minutes: 10080, resets_at: 1789818344 } },
+          "2025-12-31T23:59:30.000Z")}`,
       [rollout("2026/01/01", "2026-01-01T00-01-00")]:
-        `x\n${tokenCount({ primary: { used_percent: 1, window_minutes: 10080, resets_at: 1789818344 } })}`,
+        `x\n${tokenCount({ primary: { used_percent: 1, window_minutes: 10080, resets_at: 1789818344 } },
+          "2026-01-01T00:01:30.000Z")}`,
     });
     expect(readCodexSubscriptionWindows({ codexHome: "/home/.codex", fs })[0].usedPercent).toBe(1);
   });

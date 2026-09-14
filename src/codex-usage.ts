@@ -15,10 +15,21 @@ import { codexSubscriptionWindows, type SubscriptionWindow } from "./subscriptio
  *
  * WHY NOT THIS SESSION'S ROLLOUT. The number is account-wide, not per session,
  * and the popover's whole point is to answer "how much have I got left" BEFORE
- * spending any of it — the moment when this session has written nothing. The
- * newest rollout that carries a snapshot is therefore the freshest observation
- * of the account, whichever session made it, and "Observed <time>" in the panel
- * is what makes an older one honest rather than misleading.
+ * spending any of it — the moment when this session has written nothing. So the
+ * freshest observation of the account wins, whichever session made it, and
+ * "Observed <time>" in the panel is what makes an older one honest rather than
+ * misleading.
+ *
+ * WHY THE NEWEST FILE IS NOT THE NEWEST OBSERVATION. A rollout is NAMED when its
+ * session starts and appended to until that session ends, so sessions overlap
+ * and the name orders starts, not writes. Measured in this tree on 2026-09-13:
+ * `rollout-2026-09-13T23-51-19-…` last wrote 55% at 00:51 the next morning,
+ * while `rollout-2026-09-13T23-58-16-…` — a later name — last wrote 41% at
+ * 22:27. Taking the first file that had any snapshot published 41% as the
+ * current account figure, understating it by fourteen points with no sign
+ * anything was wrong. The name still decides what to READ, because it is the
+ * only ordering available without stat'ing every file; the event's own timestamp
+ * decides what to BELIEVE.
  *
  * WHY A TAIL. Rollouts reach tens of megabytes (47 MB measured on this box), and
  * this runs when a popover opens. `token_count` is written at the end of every
@@ -125,10 +136,15 @@ export function rateLimitsFromRolloutTail(chunk: string): SubscriptionWindow[] {
 }
 
 /**
- * Newest-first across Codex's rollout tree; the first file with a usable
- * snapshot wins. `[]` for every failure — a missing tree, a vendor format
- * change, a machine that has never run Codex — because the panel's honest
- * answer to "we could not read this" is the same as "there is nothing yet".
+ * The freshest snapshot in the newest-named files Codex has, by the events' own
+ * timestamps rather than by filename — see WHY THE NEWEST FILE IS NOT THE NEWEST
+ * OBSERVATION above. That means every file in the bounded set is read rather
+ * than stopping at the first hit; measured at 18 ms for all eight on a real
+ * `~/.codex`, against 10 ms for one, which is nothing beside being wrong.
+ *
+ * `[]` for every failure — a missing tree, a vendor format change, a machine
+ * that has never run Codex — because the panel's honest answer to "we could not
+ * read this" is the same as "there is nothing yet".
  */
 export function readCodexSubscriptionWindows(deps: {
   codexHome: string;
@@ -139,12 +155,17 @@ export function readCodexSubscriptionWindows(deps: {
   const tailBytes = deps.tailBytes ?? CODEX_ROLLOUT_TAIL_BYTES;
   const sessionsRoot = path.join(deps.codexHome, "sessions");
   let scanned = 0;
+  let freshest: SubscriptionWindow[] = [];
   for (const day of dayDirectories(fs, sessionsRoot)) {
     for (const file of rolloutsIn(fs, day)) {
-      if (scanned++ >= MAX_FILES_SCANNED) return [];
+      if (scanned++ >= MAX_FILES_SCANNED) return freshest;
       const windows = rateLimitsFromRolloutTail(fs.readTail(file, tailBytes));
-      if (windows.length) return windows;
+      // Both windows of one snapshot share the event's timestamp, and every
+      // observedAt is a normalized ISO instant, so this compares as text.
+      if (windows.length && (!freshest.length || windows[0].observedAt > freshest[0].observedAt)) {
+        freshest = windows;
+      }
     }
   }
-  return [];
+  return freshest;
 }
