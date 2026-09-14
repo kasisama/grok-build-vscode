@@ -72,4 +72,16 @@ describe("only an accepted credential says an account works", () => {
     const probe = between("private async reprobeProviderCredentials", "The remote half of connecting");
     expect(probe).toContain("this.setProviderNeedsLogin(\"grok\", false)");
   });
+
+  // And so does a device sign-in the app itself calls verified. Claude's check
+  // is `probeClaudeAuthStatus`, which answers without going through the probe
+  // that clears -- so a phone sign-in ended with the account still flagged, the
+  // card back, and (because the flag is what re-arms recovery) the next send
+  // reusing the process built on the dead token. A refresh does not fix that;
+  // the listing clear this file removes is what used to hide it.
+  it("a device sign-in it calls verified gets to say so too", () => {
+    const confirm = between("private async confirmDeviceLoginInner", "await this.setProviderConnected(provider, true)");
+    expect(confirm).toContain("device login: credential verified");
+    expect(confirm).toContain("this.setProviderNeedsLogin(provider, false)");
+  });
 });

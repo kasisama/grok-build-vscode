@@ -2163,6 +2163,21 @@ export class GrokSidebar {
         ? await this.deviceLoginCredentialReady(provider)
         : await this.reprobeProviderCredentials(provider)) {
         this.host.appendLine(`[${provider}] device login: credential verified`);
+        // Say it about the needs-login flag too, and not only about `connected`.
+        // For grok and codex this is a no-op -- `reprobeProviderCredentials`
+        // above already lowered it -- but Claude's check is
+        // `probeClaudeAuthStatus`, which answers the question without going
+        // through the probe that clears. Nothing else covered that: a phone
+        // sign-in ends here, and `adoptSessionsForConnectedProvider` leaves a
+        // conversation that still has a client alone by design.
+        //
+        // If this CLI is wrong about its own sign-in, the next prompt raises the
+        // flag again a second later, which is the bounded failure. The
+        // unbounded one is the other direction: the account stays flagged after
+        // a sign-in the app itself just called verified, the card comes back,
+        // and (since the flag is also what re-arms auth recovery) the next send
+        // reuses the process built on the dead token. A refresh does not fix it.
+        this.setProviderNeedsLogin(provider, false);
         // Promote on evidence, exactly as the Providers refresh does. The probe
         // just proved the account works; without this the persisted `connected`
         // flag stays false, so Settings keeps offering Connect and never offers
