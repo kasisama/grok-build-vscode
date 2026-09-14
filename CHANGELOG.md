@@ -1,5 +1,49 @@
 # Changelog
 
+## 4.6.0 — 2026-09-14
+
+**When an agent's sign-in expires in the middle of a conversation, the app now helps you fix it where it broke.** Until now the vendor simply started refusing turns, and every way back to a sign-in was somewhere else — the onboarding card deliberately refuses to paint over a live conversation, so the one screen that explains how to connect an agent was the one screen you could not get to. Alongside that: voice typing no longer needs an xAI key if you already pay OpenAI, and the context donut now shows how much of your subscription window is left.
+
+### Added
+
+- **A way back in, above the message box.** When the agent you are talking to needs signing in again, a card appears directly above the composer — on the conversation that is failing, not in a settings page you have to go and find. It says the account is still linked and only its sign-in expired, and it offers the same sign-in the accounts row does. Your conversation stays usable; being locked out of your own transcript over somebody else's expired token would be worse than one more refused send. On a phone it runs the device-code flow; where the host is too old to sign in remotely it says so plainly instead of showing a button that does nothing.
+
+- **Voice typing with the account you already pay for (#124).** Speech-to-text was xAI-only, so without an xAI subscription you had to supply an xAI API key at $0.08 a minute to dictate a prompt. OpenAI is now a second backend, at a fraction of that, using a key you may already hold. Pick one in Settings, or leave it to follow the agent you are using. (Anthropic publishes no speech-to-text API at all, so there is no Claude-native option to offer — that is the vendor's boundary, not a gap here.)
+
+- **How much of your subscription window is left (#159).** The context donut has always answered "how full is this conversation". It now also answers "how much of my plan have I used this week", as labelled windows with a meter, a reset time, and when the reading was taken. Grok asks its account, Codex reads the file Codex itself writes, and Claude's arrives with your next reply — which the panel says, rather than showing a blank that reads like a broken screen.
+
+### Changed
+
+- **Claude's model picker names models.** It was listing policy names and context sizes; it now says which model you are choosing.
+
+- **Opening Projects on a phone closes what it slides over.** The drawer used to come across an open model, mode or context popover and leave it underneath.
+
+- **Section headers in popovers have air on both sides of their divider**, and the subscription note's reset and observation times are two lines of one remark rather than two remarks with a gap between them.
+
+### Fixed
+
+- **Signing in actually fixes the conversation you signed in for.** Renewing an account used to leave the failing conversation exactly as it was: it still held a process built on the dead token, and that process had already spent its one automatic retry, so the very next message was refused again and the card came back. Completing a sign-in now re-arms that retry everywhere, and the next message restarts the conversation's agent behind the scenes and sends what you typed.
+
+- **The offer stops appearing and disappearing on its own.** The card blinked and then vanished, most visibly on a phone. Two separate things were quietly deciding the account was fine again — starting a fresh agent process, and a history listing that came back — and neither is evidence: both complete perfectly against a dead token. Only something the account itself accepted clears it now: a turn that was answered, a message that went through on the second try, an explicit re-check, or a sign-in the vendor confirmed.
+
+- **A prompt sent during an expiry is not sent twice.** When the app restarted the conversation to retry your message, the agent's own replay put that message back on screen and the retry added a second copy. It now recognises the one the replay restored.
+
+- **On a desktop, signing in again keeps you in the conversation.** Renewing an expired account used to park the transcript you were in and open a new empty one — from a card whose whole purpose was to save you that trip. Connecting an additional account still starts fresh, because that genuinely is a different errand.
+
+- **The sign-in you are already doing is not offered again.** After you pasted the device code, the entry field closed while verification ran and the card underneath went straight back to "Sign in" for a second or two — which reads as a failure at the exact moment it is working, and a second tap restarts the flow. It now says "Signing in…" until the flow actually ends.
+
+- **A sign-in that worked says so.** The agent's refusal used to stay the last thing on screen, so a wizard closing in silence read as another failure. A short line now appears under it. It is deliberately temporary and does not come back when you reopen the conversation.
+
+- **Codex account usage reads the newest observation, not the newest file.** Codex does not always write to the file with the latest name, so the panel could report an older reading as current.
+
+- **A phone's microphone says why it cannot record.** It failed silently — no message, no error, nothing. It now names the reason.
+
+- **The desktop app stops dropping messages nothing had registered for**, which is what made some controls do nothing at all there while working everywhere else.
+
+- **A question card closes when the agent stops waiting for an answer**, instead of sitting there after the moment has passed — on every surface, not just the one you answered it on.
+
+- **The subscription panel does not promise numbers your computer cannot send.** Opened from a phone against an extension older than this release, it painted the section anyway — telling a Claude user to wait for a reply that could never fill it. It now appears only once the reading it needs has actually arrived.
+
 ## 4.5.2 — 2026-09-13
 
 **If your project had its own setting for reasoning effort, the picker could not move it.** You dragged the strip, the new level showed while the popover was open, and about a second after you closed it the level went back — to the same one every time, whatever you picked. Reported as "can't set effort level; goes back to 'low'" (#162), and invisible to anyone without such a setting, which is why it took a screen recording to see.
