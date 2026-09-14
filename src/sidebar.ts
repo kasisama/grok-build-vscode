@@ -20,6 +20,7 @@ import type { AcpProvider, BackendSessionListEntry } from "./acp-backend";
 import { isAdapterProvider, isAcpProvider, ACP_PROVIDERS } from "./acp-backend";
 import { CODEX_ACP_ADAPTER_VERSION, CodexBackend, isCodexCredentialError } from "./codex-backend";
 import { locateCodexCli, resolveCodexHome } from "./codex-cli-locator";
+import { readCodexSubscriptionWindows } from "./codex-usage";
 import { CODEX_MANAGED_VERSION, codexManagedRoot, installManagedCodex } from "./codex-managed-installer";
 import { CLI_NPM_PACKAGE, cliUpdatePlan, selfUpdateArgs } from "./cli-update-plan";
 import { warmCodexModelCache } from "./codex-model-cache";
@@ -18672,14 +18673,15 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
   private subscriptionUsageCaches?: Map<string, SubscriptionUsageCache>;
 
   private bindSubscriptionUsage(session: Session, env: NodeJS.ProcessEnv): void {
-    if (session.provider !== "grok" && session.provider !== "claude") return;
     const provider = session.provider;
     const cwd = this.sessionCwd(session);
     const key = subscriptionCredentialContext(provider, env);
     const caches = this.subscriptionUsageCaches ??= new Map();
     // Claude can authenticate via an opaque OS keychain. Keep its observations
     // process-local so a replacement cannot inherit a different login's window.
-    let cache = provider === "grok" ? caches.get(key) : new SubscriptionUsageCache();
+    // Grok and Codex both write their login to a file the key already hashes,
+    // so a swap changes the key and the shared cache is safe for them.
+    let cache = provider === "claude" ? new SubscriptionUsageCache() : caches.get(key);
     if (!cache) caches.set(key, cache = new SubscriptionUsageCache());
     session.subscriptionUsage = new SubscriptionUsageBinding(cache, key, () =>
       subscriptionCredentialContext(provider, provider === "grok"
@@ -18710,8 +18712,20 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     const binding = session.subscriptionUsage;
     const client = session.client;
     this.publishSubscriptionUsage(session);
-    if (session.provider !== "grok" || !client?.sessionId || !binding) return;
-    await binding.refresh(() => client.getSubscriptionUsage());
+    if (!binding) return;
+    // Claude has no pull at all: its windows arrive on the rate-limit event
+    // that rides a turn, so `observe()` is the only writer and there is
+    // nothing to refresh here.
+    if (session.provider === "codex") {
+      // A file read, not an RPC — Codex's adapter does not forward the account
+      // windows it receives, so the rollout is the only structured source.
+      await binding.refresh(async () => readCodexSubscriptionWindows({
+        codexHome: resolveCodexHome(process.env),
+      }));
+    } else if (session.provider === "grok") {
+      if (!client?.sessionId) return;
+      await binding.refresh(() => client.getSubscriptionUsage());
+    } else return;
     if (session.client === client && session.subscriptionUsage === binding) this.publishSubscriptionUsage(session);
   }
 
