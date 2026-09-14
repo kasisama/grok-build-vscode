@@ -16501,8 +16501,27 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     const gen = session.gen;
     if (gen !== session.gen) return true;
 
-    session.userMessageCount += 1;
-    this.emit(session, { type: "userMessage", text: displayText, chips });
+    // The restart above wiped the transcript and replayed it from the agent's
+    // own record, so this bubble may already be back. Claude persists the user
+    // turn BEFORE the call it then refuses, and `session/load` republishes it as
+    // a user_message_chunk (the userMessageChunk handler forwards those while
+    // replaying, by design) -- so re-emitting unconditionally put the prompt on
+    // screen twice, which is what the owner saw as "doubling my prompts".
+    //
+    // `replayUserRaw` is the replay's own accumulator for the user message it
+    // is currently in, and `inUserMessage` is still true only if the transcript
+    // ENDED on a user turn -- a reply of any kind clears it. A transcript
+    // ending on our own text is precisely the refused turn.
+    //
+    // An inexact match re-emits, which is today's behaviour: the failure
+    // direction is a duplicated bubble, never a prompt the person cannot see.
+    const replayRestoredIt = session.inUserMessage
+      && session.replayUserRaw.trim() === displayText.trim();
+    if (!replayRestoredIt) {
+      // The replay already counted the turn it restored; only count ours.
+      session.userMessageCount += 1;
+      this.emit(session, { type: "userMessage", text: displayText, chips });
+    }
     this.emit(session, { type: "agentStart" });
     // The resend is a turn in its own right — it gets its own token, and the
     // outer turn's `finally` can no longer end it (the tokens differ).
