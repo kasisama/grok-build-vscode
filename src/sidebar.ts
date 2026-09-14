@@ -1739,7 +1739,28 @@ export class GrokSidebar {
     // A recovered account must be able to re-list at once; the freshness stamp
     // would otherwise hold the empty catalog for its full back-off window.
     if (!needsLogin && isAdapterProvider(provider)) this.adapterHistory(provider)?.at.clear();
+    // And it must be able to RECOVER again. `authRecoveryTried` survives a
+    // startSession on purpose (#58: an entitlement failure must not pay a
+    // restart+resend on every prompt), and only a clean turn re-arms it -- which
+    // a conversation holding a process built on a dead token can never have. So
+    // a session that spent its recovery kept a dead client forever, and signing
+    // in changed nothing about the conversation the sign-in was asked for.
+    // A sign-in actually completing is new information, and it is exactly the
+    // thing `authRecoveryTried` was standing in for the absence of. Re-arming
+    // here costs the next send one process restart and a resend, which is the
+    // recovery doing its job, rather than a second restart path of its own.
+    if (!needsLogin) this.rearmAuthRecovery(provider);
     this.postProviderState();
+  }
+
+  /** Every session on this provider may try the token dance once more. */
+  private rearmAuthRecovery(provider: AcpProvider): void {
+    const rearm = (session: Session | undefined) => {
+      if (session?.provider === provider) session.authRecoveryTried = false;
+    };
+    rearm(this.focused);
+    for (const session of this.pool) rearm(session);
+    for (const session of this.remoteClients.detachedActiveValues()) rearm(session);
   }
 
   private async warmConnectedCodexModels(): Promise<boolean> {
@@ -11636,6 +11657,10 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         }
         // Official CLI owns login. For Claude this is `claude auth login`
         // without --claudeai — we never implement or proxy Claude.ai OAuth.
+        // Connecting an account and RENEWING one are different errands, and
+        // only the second is about the conversation on screen. Read the flag
+        // before the probe below can clear it.
+        const renewing = !!this.providerNeedsLogin?.[provider];
         const loginArgs = provider === "claude" ? ["auth", "login"] : ["login"];
         const term = this.host.createTerminal({
           name: `${providerDisplayName(provider)} Login`,
@@ -11664,7 +11689,15 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         // remote branch above returns before here — TypeScript pointed out the
         // comparison could no longer be false, which is the check that the two
         // paths really are separate rather than merely intended to be.
-        if (session.hasHistory && this.workspaceRoot()) {
+        //
+        // A RENEWAL is the exception, and it is the case the composer's
+        // lapsed-account card asks for: that card sits on a conversation whose
+        // replies are being refused and offers to fix THAT conversation, so
+        // parking it to make room for a panel answers a question nobody asked.
+        // The panel below is posted either way; on a live transcript the
+        // welcome hold declines to paint it, which is the same hold that made
+        // this card necessary. The terminal is the flow there.
+        if (session.hasHistory && this.workspaceRoot() && !renewing) {
           await this.newFocusedSession(origin);
         }
         // ALWAYS show this provider's login panel, and say the terminal was
