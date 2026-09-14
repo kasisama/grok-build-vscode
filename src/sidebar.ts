@@ -10573,7 +10573,15 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
       this.pool.add(session);
       this.touch(session);
       this.reapPool(); // enforce the LRU cap now that the pool grew
-      this.setProviderNeedsLogin(session.provider, false);
+      // NOT `setProviderNeedsLogin(provider, false)` here. Starting a process
+      // and loading a session does not exercise the credential: measured on the
+      // owner's cloud host 2026-09-14, session/create + session/load + replay
+      // all completed cleanly against a dead Claude token and the prompt one
+      // second later answered "Authentication required". This line ran inside
+      // recoverAuthAndResend's own restart, so every send cleared the account
+      // flag on its way to failing -- the sign-in card blinked out at the
+      // moment it was most needed. Only an accepted credential clears it now;
+      // see the clean-turn site in handleSend.
       this.emit(session, { type: "setBusy", value: false });
       // A draft this conversation lost to a provider sign-out comes back with
       // it, before the queue flushes — the composer is where it was typed.
@@ -13195,7 +13203,15 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         };
       }
       const entries = result.sessions.map((entry) => adapterListEntry(entry, stableOverrides, provider));
-      this.setProviderNeedsLogin(provider, false);
+      // Same reasoning as startSession's: listing sessions reads this machine's
+      // own files and succeeds with any token at all. On the owner's host a
+      // phone reconnect swept four project folders at 10:05:40, spawning an
+      // adapter per folder, and each success wiped the needs-login the failing
+      // conversation had just raised. The catch below still LOWERS the verdict
+      // from a listing -- a listing that fails with a credential error is real
+      // evidence -- but a listing that succeeds is evidence of nothing.
+      // (Kept on the grok/probe paths, which make a call the account must
+      // authorize; this one does not.)
       history.cache.set(key, entries);
       history.at.set(key, Date.now());
       await this.updateSessionMeta((current) => {
@@ -16358,6 +16374,11 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
       // the push that makes the row's position true rather than asserted.
       this.noteSessionActivity(session);
       session.authRecoveryTried = false; // a clean turn re-arms token auto-recovery
+      // A served turn is the only proof the account works that this app ever
+      // actually has. It is what now clears the flag the two sites above stopped
+      // clearing, and it is self-healing: the first reply after a sign-in takes
+      // the card down, and nothing takes it down before one arrives.
+      this.setProviderNeedsLogin(session.provider, false);
       this.maybeGenerateTitle(session);
       this.postSessionName(session);
     } catch (err) {
@@ -16484,6 +16505,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
       this.noteLiveTurnEnded(session);
       this.setStatus(session, "done");
       session.authRecoveryTried = false; // recovered — re-arm for a future expiry
+      this.setProviderNeedsLogin(session.provider, false); // and the token really is good
       this.maybeGenerateTitle(session);
       this.postSessionName(session);
     } catch (err2) {
