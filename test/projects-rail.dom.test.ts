@@ -2752,3 +2752,38 @@ describe("project header is a fold control, not a repo switch", () => {
     expect(posted.filter((p) => p.type === "selectRepo")).toEqual([]);
   });
 });
+
+// The phone's projects drawer opens OVER the conversation, and the model, mode
+// and context popovers are anchored to the composer it covers. web/chat.html
+// owns the drawer (see `withRail` above: the mount is the relay page's), so the
+// renderer cannot see it open — it exposes the close instead.
+describe("the shell can close the renderer's toolbar popovers", () => {
+  const openers = [
+    ["context", "donut", "context-popover"],
+    ["model / gear", "gear-btn", "gear-popover"],
+    ["mode", "mode-btn", "mode-popover"],
+  ] as const;
+
+  it.each(openers)("closes the %s popover", (_label, button, popover) => {
+    const h = bootWebview();
+    withRail(h.window);
+    dispatch(h.window, { type: "session", provider: "grok", models: [], currentModelId: "m" } as any);
+    click(h.window, h.doc.getElementById(button)!);
+    expect(h.doc.getElementById(popover)!.hidden).toBe(false);
+
+    (h.window as any).afkpilotLayers.closePopovers();
+    expect(h.doc.getElementById(popover)!.hidden).toBe(true);
+  });
+
+  // It is not a Back closer: a popover dismisses on the next tap anywhere, so
+  // giving it a history entry would spend the gesture that belongs to the
+  // drawer under it.
+  it("is not counted as a layer", () => {
+    const h = bootWebview();
+    withRail(h.window);
+    const layers = (h.window as any).afkpilotLayers;
+    click(h.window, h.doc.getElementById("donut")!);
+    expect(layers.depth).toBe(0);
+    expect(layers.dismissTop()).toBe(false);
+  });
+});

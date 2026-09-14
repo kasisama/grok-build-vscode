@@ -3352,6 +3352,12 @@
       }
       return false;
     },
+    // Not a layer, and deliberately not part of `depth`/`dismissTop`: a toolbar
+    // popover does not own Back. The shell needs it because a phone opens the
+    // projects drawer OVER the conversation, and a model/mode/context popover
+    // left hanging there belongs to the screen underneath — the drawer is the
+    // page's own layer, so only the page knows it opened.
+    closePopovers() { closePopovers(); },
   };
   let lastLayerDepth = window.afkpilotLayers.depth;
   function reportLayerDepth() {
