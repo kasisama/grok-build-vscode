@@ -1306,9 +1306,9 @@ a:hover {
   white-space: nowrap;
   overflow-wrap: normal;
 }
-.subscription-usage { border-top: 1px solid var(--vscode-panel-border); margin-top: 10px; }
+.subscription-usage { border-top: 1px solid var(--vscode-panel-border); margin-top: 8px; }
 .subscription-window + .subscription-window { margin-top: 10px; }
-.subscription-fullness { height: 5px; border-radius: 3px; overflow: hidden; margin: 5px 10px; background: var(--vscode-editorWidget-border, #6666); }
+.subscription-fullness { height: 5px; border-radius: 3px; overflow: hidden; margin: 2px 10px 8px; background: var(--vscode-editorWidget-border, #6666); }
 .subscription-fullness > i { display: block; height: 100%; background: var(--vscode-textLink-foreground); }
 .subscription-usage .popover-fineprint { margin-top: 4px; }
 /* .history-popover sets display:flex, which would otherwise beat the UA
@@ -1981,7 +1981,6 @@ a.onb-action.onb-secondary:hover {
 .gear-lead .provider-glyph { margin-right: 1px; }
 .model-picker-row .gear-lead { min-width: 0; }
 .model-picker-row .model-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.model-provider-heading { margin-top: 4px; }
 
 .msg {
   display: flex;
@@ -3928,15 +3927,21 @@ textarea#input {
 /* ---- mode / section popover extras ---- */
 
 .mode-popover-item { min-width: 240px; }
+/* A section header sits on a divider, so it needs air on BOTH sides of it:
+   above, to separate it from the section that ended; below, to attach the
+   label to the rows it heads. It had 2px and 5px, which read as the divider
+   being stuck to whatever was above it — reported on a phone against three
+   different headers (Subscription usage, In this window, and the model
+   picker's provider groups), which is one rule seen three times. */
 .popover-section {
-  padding: 5px 10px 2px;
+  padding: 8px 10px 4px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--vscode-descriptionForeground);
   border-top: 1px solid var(--vscode-editorWidget-border);
-  margin-top: 2px;
+  margin-top: 8px;
 }
 .popover-section:first-child,
 .popover-section-first { border-top: none; margin-top: 0; }
