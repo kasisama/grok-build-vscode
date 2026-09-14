@@ -16409,7 +16409,14 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     const credential = session.client?.isCredentialError(err) === true || isCredentialError(err);
     if (!credential && !isAuthErrorText(errorText)) return false;
     const resumeId = beginAuthRecovery(session);
-    if (!resumeId) return false;
+    if (!resumeId) {
+      // One recovery per failure streak, so every send after the first declines
+      // here -- and those are the ones a person makes while wondering why
+      // nothing works. Strict classification only: entitlement wording must
+      // never label an account signed-out, because a sign-in cannot fix it.
+      if (credential) this.setProviderNeedsLogin(session.provider, true);
+      return false;
+    }
     if (!credential) {
       this.host.appendLine(`[auth] reloading session without resending: ${errorText}`);
       await this.startSession(resumeId, session);
@@ -16472,6 +16479,13 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         this.emit(session, { type: "agentError", text: errorDetail(e2) });
         this.noteLiveTurnEnded(session);
         this.setStatus(session, "error");
+        // The account flag, not only the overlay. The overlay is the empty-state
+        // card, and the renderer deliberately refuses to paint it over a live
+        // conversation (welcomeHoldActive) -- which is exactly where a mid-turn
+        // expiry happens, so on a phone the whole guidance was a red line of the
+        // vendor's own prose. This flag is what every view already reads to turn
+        // its affordances into a sign-in, and nothing was setting it here.
+        this.setProviderNeedsLogin(session.provider, true);
         this.post({ type: "onboarding", state: this.onboardingForSession(session) });
       } else {
         // Entitlement/billing wording (or anything else) on a fresh process is

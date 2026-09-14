@@ -67,6 +67,11 @@ function recoverySidebar(error: unknown, provider: "grok" | "claude" | "codex" =
     "reportRemoteMessage", "noteSessionActivity", "noteLiveTurnEnded", "maybeGenerateTitle",
     "postSessionName", "settleUnavailablePlanTurn", "maybeFlushQueuedSends",
   ]) sidebar[name] = vi.fn();
+  // A credential that stays dead now flags the ACCOUNT, not just the overlay.
+  // The real one broadcasts provider state, which wants far more of a sidebar
+  // than a replay-policy test should carry; `provider-needs-login.test.ts` is
+  // where that method is exercised for real.
+  sidebar.setProviderNeedsLogin = vi.fn();
   sidebar.onboardingForSession = vi.fn(() => ({ provider }));
   return { sidebar, session, firstPrompt, retryPrompt };
 }
@@ -125,6 +130,7 @@ describe("prompt recovery replay policy (#151)", () => {
     await sidebar.handleSend("keep going", false, session);
     expect(retryPrompt).toHaveBeenCalledTimes(1);
     expect(sidebar.post).toHaveBeenCalledWith({ type: "onboarding", state: { provider: "grok" } });
+    expect(sidebar.setProviderNeedsLogin).toHaveBeenCalledWith("grok", true);
     expect(session.authRecoveryTried).toBe(true);
   });
 });

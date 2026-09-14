@@ -12490,6 +12490,61 @@
     el.append(title, body, btn);
   }
 
+  /**
+   * A lapsed account is only actionable if the person is told where to act.
+   *
+   * "Sign in" normally lives on the empty-state welcome card, and that card
+   * deliberately refuses to paint over a live conversation (welcomeHoldActive)
+   * -- which is exactly where a token expires. What the owner saw on a phone
+   * was the vendor's own "Authentication required" in red and nothing else: no
+   * account row, no button, no mention of signing in. So the offer goes where
+   * the failure is, directly above the composer that is about to fail again.
+   *
+   * The composer is NOT frozen the way a superseded session freezes it. This
+   * flag is our bookkeeping about somebody else's credential; locking a person
+   * out of their own conversation over it is worse than one more refused send.
+   */
+  function renderProviderSignInCard() {
+    const composer = document.querySelector(".composer");
+    let el = document.getElementById("provider-signin-card");
+    const provider = state.providersKnown && providerNeedsLogin(state.activeProvider)
+      ? state.activeProvider : "";
+    if (!provider || !composer) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "provider-signin-card";
+      el.className = "provider-signin-card";
+      composer.insertBefore(el, composer.firstChild);
+    }
+    const name = providerDisplayName(provider);
+    // Capability, never a version check: a host built before remote sign-in
+    // drops `runGrokLogin` silently, and a button that does nothing is worse
+    // than the honest dead end. Same rule the connect panel already follows.
+    const canSignIn = !IS_REMOTE || !!(state.hostCaps && state.hostCaps.remoteAgentSignIn);
+    el.replaceChildren();
+    const title = document.createElement("p");
+    title.className = "provider-signin-title";
+    title.textContent = name + " needs you to sign in again";
+    const body = document.createElement("p");
+    body.className = "provider-signin-body";
+    // What it MEANS, not what happened: the refusals are visible above, and
+    // what the reader needs to know is that they stop once this is done.
+    body.textContent = canSignIn
+      ? "The account is still linked — its sign-in expired, so replies are refused until you renew it."
+      : name + " can only be signed in on the computer running this workspace. Sign in there, then refresh this view.";
+    el.append(title, body);
+    if (!canSignIn) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "provider-signin-btn";
+    btn.textContent = "Sign in";
+    btn.onclick = () => { vscode.postMessage({ type: "runGrokLogin", provider }); };
+    el.appendChild(btn);
+  }
+
   function enterSessionSuperseded(id, cwd) {
     if (!id) return;
     state.sessionSuperseded = { id, cwd: cwd || sessionSupersededCwd(id) };
@@ -17443,6 +17498,7 @@
         if (!gearPopover.hidden && state.gearView === "main") renderGearMain();
         if (!addPopover.hidden) renderAddPopover();
         refreshModelControls();
+        renderProviderSignInCard();
         if (!historyPopover.hidden) renderSessionRows();
         renderRail();
         break;
@@ -17820,6 +17876,7 @@
         state.availableModels = msg.models || [];
         if (currentModel()?.reasoningEffort) state.effort = currentModel().reasoningEffort;
         refreshModelControls();
+        renderProviderSignInCard();
         const m = state.availableModels.find((x) => x.modelId === msg.currentModelId && (!x.provider || x.provider === state.activeProvider));
         if (m?.totalContextTokens) state.contextWindow = m.totalContextTokens;
         state.contextBreakdown = null;
