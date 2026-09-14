@@ -539,6 +539,9 @@
 
   const state = {
     welcomeVisible: true,
+    // Which provider the composer's sign-in card is currently offering, so the
+    // moment it clears can be told from the moment it is merely replaced.
+    signInCardFor: "",
     currentModelId: null,
     activeProvider: "grok",
     providersKnown: false,
@@ -12504,11 +12507,42 @@
    * flag is our bookkeeping about somebody else's credential; locking a person
    * out of their own conversation over it is worse than one more refused send.
    */
+  /**
+   * "Your sign-in worked", where the person is actually looking.
+   *
+   * Nothing else says it: `providerState` only un-hides affordances, and the
+   * agent's refusal stays on screen until something else is appended.
+   */
+  function noteSignInRecovered(provider) {
+    // An empty transcript is already telling the whole story through the
+    // onboarding panel -- and `addPlanNotice` hides that panel to make room,
+    // which would trade a confirmation for the connect UI itself.
+    if (state.welcomeVisible) return;
+    addPlanNotice(providerDisplayName(provider) + " is signed in again.", ICON.check);
+  }
+
   function renderProviderSignInCard() {
     const composer = document.querySelector(".composer");
     let el = document.getElementById("provider-signin-card");
     const provider = state.providersKnown && providerNeedsLogin(state.activeProvider)
       ? state.activeProvider : "";
+    // The card going away because the account was RENEWED is the only proof the
+    // sign-in worked that this view ever gets: the refusal that sent them here
+    // is still the last thing in the transcript, so a wizard that closes in
+    // silence reads as a failure (owner, 2026-09-14). Recognise the transition
+    // here, where both halves are already known, and say so once.
+    //
+    // Deliberately a CLIENT-side line, not a host message: "was the error
+    // visible in THIS view?" is a question only this view can answer, and a
+    // restored conversation repaints from the host's buffer -- so the line is
+    // gone the next time the conversation loads, which is what he asked for.
+    const wasUp = state.signInCardFor;
+    state.signInCardFor = provider;
+    // `wasUp !== provider` alone would also fire when the active provider is
+    // switched away from a still-expired account, so re-read the flag itself.
+    if (wasUp && wasUp !== provider && !providerNeedsLogin(wasUp)) {
+      noteSignInRecovered(wasUp);
+    }
     if (!provider || !composer) {
       if (el) el.remove();
       return;
@@ -12524,6 +12558,15 @@
     // drops `runGrokLogin` silently, and a button that does nothing is worse
     // than the honest dead end. Same rule the connect panel already follows.
     const canSignIn = !IS_REMOTE || !!(state.hostCaps && state.hostCaps.remoteAgentSignIn);
+    // A sign-in already running is not an offer to make one. The code entry
+    // closes the moment the code is submitted, but verifying it takes a second
+    // or two -- and the card underneath went straight back to "Sign in", which
+    // reads as "that did not work, try again" at the exact moment it IS working
+    // (owner, from a phone, 2026-09-14). Same liveness test the connect panel
+    // uses to decide the wizard owns the flow.
+    const device = state.deviceLoginByProvider[provider];
+    const signingIn = !!device && (device.status === "starting" || device.status === "waiting"
+      || device.status === "verifying" || !!device.preflight);
     el.replaceChildren();
     const title = document.createElement("p");
     title.className = "provider-signin-title";
@@ -12537,6 +12580,15 @@
       : name + " can only be signed in on the computer running this workspace. Sign in there, then refresh this view.";
     el.append(title, body);
     if (!canSignIn) return;
+    if (signingIn) {
+      // Keep the row rather than dropping it: the card holding its height
+      // stops the composer jumping under a thumb that is still near it.
+      const busy = document.createElement("p");
+      busy.className = "provider-signin-busy";
+      busy.textContent = "Signing in…";
+      el.appendChild(busy);
+      return;
+    }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "provider-signin-btn";
@@ -13229,12 +13281,12 @@
     scrollToBottom();
   }
 
-  function addPlanNotice(text) {
+  function addPlanNotice(text, icon) {
     clearWelcome();
     hideGrokking();
     const el = document.createElement("div");
     el.className = "plan-notice";
-    el.innerHTML = `${ICON.listTree}<span>${escapeHtml(text)}</span>`;
+    el.innerHTML = `${icon || ICON.listTree}<span>${escapeHtml(text)}</span>`;
     appendTranscriptChild(el);
     scrollToBottom();
   }
@@ -18908,6 +18960,11 @@
             // first painted the previous state every time (caught by driving
             // the states in a browser, 2026-08-31).
             syncConnectWizard(msg.provider, msg.device);
+            // The composer card reads the same mirror, and this is the only
+            // frame that moves it. Without this call its "Signing in…" state
+            // waits for the next providerState -- which is the frame that
+            // arrives when the sign-in has already finished.
+            renderProviderSignInCard();
           }
         break;
       case "error":

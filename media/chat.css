@@ -4790,6 +4790,17 @@ body.dragging { outline: 2px dashed var(--vscode-focusBorder); outline-offset: -
   min-width: 160px;
 }
 .provider-signin-btn:hover { background: var(--vscode-button-hoverBackground); }
+/* Where the button sits while a sign-in is actually running. Same box, so the
+   composer does not move under a thumb that is still near it. */
+.provider-signin-busy {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 34px;
+  padding: 7px 0;
+  line-height: 20px;
+  color: var(--vscode-descriptionForeground);
+}
 /* The composer is frozen, so it does not sit under the card pretending
    otherwise. Every control inside it is `disabled` in the renderer as well —
    opacity alone still takes clicks. */
