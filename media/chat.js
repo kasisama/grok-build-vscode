@@ -2267,7 +2267,13 @@
       && (window.periodStart === undefined || validDate(window.periodStart))
       && (window.periodEnd === undefined || validDate(window.periodEnd)));
     if (!windows.length) {
-      note("No subscription usage reported yet.");
+      // Claude has no pull: its account window rides the rate-limit event that
+      // comes back with a reply, so a session that has not spoken yet has
+      // nothing to show and "nothing reported" reads as a broken panel. Say
+      // which it is — the user can act on the first sentence and not the second.
+      note(state.activeProvider === "claude"
+        ? "Claude reports this during a turn — it fills in after the next reply."
+        : "No subscription usage reported yet.");
     }
     const formatPercent = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
     const formatDate = (value) => new Date(value).toLocaleString(undefined, {

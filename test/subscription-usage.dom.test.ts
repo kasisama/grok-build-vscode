@@ -17,9 +17,28 @@ describe("subscription usage in the context popover", () => {
     dispatch(h.window, { type: "session", provider, models: [], currentModelId: "model" } as any);
     const pop = open(h);
     expect(pop.hidden).toBe(false);
-    expect(pop.querySelector(".subscription-usage")?.textContent).toContain("No subscription usage reported yet.");
+    expect(pop.querySelector(".subscription-usage")?.textContent).toMatch(/No subscription usage reported yet\.|fills in after the next reply/);
     expect(pop.querySelector(".subscription-fullness")).toBeNull();
     expect(pop.querySelector('.context-fullness[aria-label="Context used"]')).not.toBeNull();
+  });
+
+  // Grok pulls its window and Codex reads one off disk, so an empty panel there
+  // really does mean "nothing yet". Claude's only source is the rate-limit event
+  // that rides a reply, so the same words would describe a working panel as a
+  // broken one on the surface where waiting is the whole answer.
+  it("tells a Claude user the number arrives with the next reply", () => {
+    const h = bootWebview();
+    dispatch(h.window, { type: "session", provider: "claude", models: [], currentModelId: "model" } as any);
+    expect(open(h).querySelector(".subscription-usage")!.textContent)
+      .toContain("Claude reports this during a turn — it fills in after the next reply.");
+  });
+
+  it.each(["grok", "codex"] as const)("does not promise %s a reply that is not what fills it", (provider) => {
+    const h = bootWebview();
+    dispatch(h.window, { type: "session", provider, models: [], currentModelId: "model" } as any);
+    const text = open(h).querySelector(".subscription-usage")!.textContent!;
+    expect(text).toContain("No subscription usage reported yet.");
+    expect(text).not.toContain("next reply");
   });
 
   it.each(["knowledge", "coding"] as const)("shows a list of labelled windows alongside context in %s mode", (appPurpose) => {
@@ -39,6 +58,21 @@ describe("subscription usage in the context popover", () => {
     expect(section.querySelectorAll('[role="meter"]')).toHaveLength(2);
     expect(pop.querySelector(".context-fullness")!.getAttribute("aria-valuenow")).toBe("25");
     expect(h.doc.getElementById("donut")!.title).toBe(iconTitle);
+  });
+
+  // The phone hides the popover's billing explanation, and it can only address
+  // it as `#context-popover > .popover-fineprint` — the class alone also covers
+  // the window's own notes, which is how "Resets …" vanished on the surface
+  // where it matters most. That selector is correct only while these notes stay
+  // NESTED. The relay half is grok-remote's test/web-context-popover-phone.
+  it("keeps the window's own notes out of the popover's direct children", () => {
+    const h = bootWebview();
+    dispatch(h.window, { type: "subscriptionUsage", windows: [windowUsage] });
+    const pop = open(h);
+    const nested = [...pop.querySelectorAll(".subscription-usage .popover-fineprint")];
+    expect(nested.map((el) => el.textContent).join(" ")).toMatch(/Resets|Reported reset/);
+    expect(nested.map((el) => el.textContent).join(" ")).toContain("Observed");
+    for (const note of nested) expect(note.parentElement).not.toBe(pop);
   });
 
   it.each([undefined, [], [{}], [{ ...windowUsage, usedPercent: null }],
