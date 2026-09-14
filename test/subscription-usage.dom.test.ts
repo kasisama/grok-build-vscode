@@ -17,7 +17,7 @@ describe("subscription usage in the context popover", () => {
     dispatch(h.window, { type: "session", provider, models: [], currentModelId: "model" } as any);
     const pop = open(h);
     expect(pop.hidden).toBe(false);
-    expect(pop.querySelector(".subscription-usage")?.textContent).toMatch(/No subscription usage reported yet\.|fills in after the next reply/);
+    expect(pop.querySelector(".subscription-usage")?.textContent).toMatch(/No subscription usage reported yet\.|Fills in after the next reply\./);
     expect(pop.querySelector(".subscription-fullness")).toBeNull();
     expect(pop.querySelector('.context-fullness[aria-label="Context used"]')).not.toBeNull();
   });
@@ -30,7 +30,7 @@ describe("subscription usage in the context popover", () => {
     const h = bootWebview();
     dispatch(h.window, { type: "session", provider: "claude", models: [], currentModelId: "model" } as any);
     expect(open(h).querySelector(".subscription-usage")!.textContent)
-      .toContain("Claude reports this during a turn — it fills in after the next reply.");
+      .toContain("Fills in after the next reply.");
   });
 
   it.each(["grok", "codex"] as const)("does not promise %s a reply that is not what fills it", (provider) => {
@@ -73,6 +73,17 @@ describe("subscription usage in the context popover", () => {
     expect(nested.map((el) => el.textContent).join(" ")).toMatch(/Resets|Reported reset/);
     expect(nested.map((el) => el.textContent).join(" ")).toContain("Observed");
     for (const note of nested) expect(note.parentElement).not.toBe(pop);
+  });
+
+  // Two notes cost two paragraph gaps for one thought, and on a phone that put
+  // "Observed" a meter's height below the figure it qualifies.
+  it("puts the reset and the observation on two lines of one note", () => {
+    const h = bootWebview();
+    dispatch(h.window, { type: "subscriptionUsage", windows: [windowUsage] });
+    const notes = [...open(h).querySelectorAll(".subscription-usage .popover-fineprint")];
+    expect(notes).toHaveLength(1);
+    expect(notes[0].querySelectorAll("br")).toHaveLength(1);
+    expect(notes[0].textContent).toMatch(/^Resets .+Observed .+$/);
   });
 
   it.each([undefined, [], [{}], [{ ...windowUsage, usedPercent: null }],

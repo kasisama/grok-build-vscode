@@ -2251,10 +2251,16 @@
     subscription.className = "subscription-usage";
     subscription.setAttribute("aria-label", "Subscription usage across your account");
     section("Subscription usage · account", subscription);
+    // Lines, not paragraphs: several notes about ONE meter are one remark on
+    // several lines, and giving each its own element gave each its own gap.
     const note = (text, parent = subscription) => {
       const el = document.createElement("div");
       el.className = "popover-fineprint";
-      el.textContent = text;
+      const lines = Array.isArray(text) ? text : [text];
+      lines.forEach((line, i) => {
+        if (i) el.appendChild(document.createElement("br"));
+        el.appendChild(document.createTextNode(line));
+      });
       parent.appendChild(el);
     };
     const validDate = (value) => typeof value === "string" && Number.isFinite(Date.parse(value));
@@ -2269,10 +2275,12 @@
     if (!windows.length) {
       // Claude has no pull: its account window rides the rate-limit event that
       // comes back with a reply, so a session that has not spoken yet has
-      // nothing to show and "nothing reported" reads as a broken panel. Say
-      // which it is — the user can act on the first sentence and not the second.
+      // nothing to show and "nothing reported" reads as a broken panel. The
+      // first version of this said so in two clauses and wrapped to three lines
+      // on a phone; WHY Claude has nothing is our problem, not the reader's, and
+      // what they can do about it is the whole message.
       note(state.activeProvider === "claude"
-        ? "Claude reports this during a turn — it fills in after the next reply."
+        ? "Fills in after the next reply."
         : "No subscription usage reported yet.");
     }
     const formatPercent = (value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
@@ -2294,10 +2302,10 @@
       fill.style.width = window.usedPercent + "%";
       meter.appendChild(fill);
       row.appendChild(meter);
-      note(window.periodEnd
+      note([window.periodEnd
         ? `${Date.parse(window.periodEnd) > Date.now() ? "Resets" : "Reported reset"} ${formatDate(window.periodEnd)}`
-        : "Reset time not reported.", row);
-      note(`Observed ${formatDate(window.observedAt)}`, row);
+        : "Reset time not reported.",
+      `Observed ${formatDate(window.observedAt)}`], row);
       subscription.appendChild(row);
     }
     if (windows.length && state.activeProvider === "claude") note("Latest reported window; other limits may apply.");
