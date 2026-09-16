@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.6.1 — 2026-09-16
+
+Four fixes, each one the same shape: something the app recorded once and kept trusting after it had stopped being true.
+
+### Fixed
+
+- **The reasoning effort you pick is the one you get (#162, #164).** If your `~/.grok/config.toml` sets `models.default_reasoning_effort`, that value quietly won over the level you chose — every new conversation started at the config's level whatever the picker showed, and the strip snapped back a second later. Your choice is now applied to the session itself before the picker ever reads it. (4.5.2 fixed a different cause of this same symptom — a workspace setting outranking a global one. This is the one that was left, and it is why the report reopened.)
+
+- **AFK Pilot can open a conversation again after you close a project at the desk.** A browser connecting after the folder it had been using was closed inherited that closed folder and was refused — including when it asked for a conversation in a project that was still open. New tabs now follow the folders that are actually open, reconnecting tabs recheck what they restored before using it, and asking for a specific conversation in an open project gets you there from a stale tab. A refusal now says so, instead of leaving the page waiting on a conversation it would never receive.
+
+- **An old conversation with nothing in it lets you change agent.** Opening a saved conversation assumed it had history, and history is what pins it to the agent that made it. One that turns out to be empty now offers your other connected agents; one that fails to load keeps the lock rather than guessing.
+
+- **Pinning and unpinning answer the click.** The row waited for the desk to write the change and report back, which read as a dead control and invited a second click that undid the first. It now moves when you click it and reconciles with the host's answer afterwards, so a slow reply cannot undo a newer click, and a change that fails to save puts the row back where it was.
+
 ## 4.6.0 — 2026-09-14
 
 **When an agent's sign-in expires in the middle of a conversation, the app now helps you fix it where it broke.** Until now the vendor simply started refusing turns, and every way back to a sign-in was somewhere else — the onboarding card deliberately refuses to paint over a live conversation, so the one screen that explains how to connect an agent was the one screen you could not get to. Alongside that: voice typing no longer needs an xAI key if you already pay OpenAI, and the context donut now shows how much of your subscription window is left.
