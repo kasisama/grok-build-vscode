@@ -180,6 +180,15 @@ body {
   --rail-repo-line-height: 1.45;
   --rail-repo-min-height: 34px;
   --rail-indent: 16px;
+  /* Conversations under a PROJECT sit one tier deeper than those under
+     Pinned or Recent, which have no parent to tuck under. The number is
+     not a taste: the project row now leads with a chevron, so its mark
+     moved right by that chevron's width, and a child that did not follow
+     would land LEFT of its own parent and flatten the tree into a list.
+     Same 32px as the VS Code rail, because the two heads are the same
+     geometry -- 4px of head padding, a 16px chevron, a 2px gap, then a
+     26px mark box. Change the chevron and this has to follow. */
+  --rail-indent-nested: 32px;
   --rail-icon-size: 14px;
   --rail-row-radius: 5px;
   --rail-hover-bg: var(--vscode-list-hoverBackground);
@@ -603,7 +612,24 @@ body.rail-resizing * {
   border: 0;
   border-radius: 4px;
 }
-/* Folder is an open/closed indicator ÔÇö the whole head is the hit target. */
+/* The disclosure control, split off the mark so the mark could become an
+   identity: a rocket has no open variant. The whole head is still the hit
+   target, so neither of these takes pointer events. 16px is the width the
+   nested indent is calculated from -- change one and --rail-indent-nested
+   has to follow. Without this rule the chevron is a bare inline span and
+   the two states size themselves: chevronRight is 14px and chevronDown is
+   12px, so the mark and the name shifted 2px sideways on every expand. */
+.rail-chevron {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 28px;
+  color: var(--vscode-descriptionForeground);
+  cursor: inherit;
+  pointer-events: none;
+}
+.rail-chevron svg { width: 12px; height: 12px; }
 .rail-twisty { cursor: inherit; pointer-events: none; }
 /* One hue, every surface that draws the project's mark: the rail, the
    composer chip, the switcher rows and the file panel's title. The marks are
@@ -853,6 +879,14 @@ body.desk:not(.desk-with-ft) .rail-action-btn { width: 24px; height: 24px; }
    differently depending on which group it sat in. The 4px stays on the
    project lists, where the gap separates whole projects. */
 .rail-sessions { display: flex; flex-direction: column; min-width: 0; gap: 2px; padding: 2px 0 5px 0; }
+/* A conversation drawn UNDER a project (.rail-sessions) tucks under its
+   parent's mark; one drawn under Pinned or Recent (.rail-list) has no
+   parent and keeps the shallow indent. Before this both sat at 16px, so a
+   grandchild lined up with a child and the tree read as a flat list --
+   which is what "the chat room of the parent group is further right than
+   the subgroup's" was describing, on a PHONE screenshot. This rail is the
+   one that screenshot came from. */
+.rail-sessions .rail-session { padding-left: var(--rail-indent-nested); }
 .rail-session {
   position: relative;
   display: flex;
@@ -1302,6 +1336,12 @@ a:hover {
 .repo-chip.disabled:hover { background: transparent; }
 .repo-chip.browsing { border-color: var(--vscode-focusBorder); color: var(--vscode-foreground); }
 .repo-chip-icon, .repo-chip > svg { display: inline-flex; flex: none; }
+/* The mark carries no width/height of its own (see repo-icons.js), and an
+   unsized <svg> inside a flex host has no intrinsic size to resolve a
+   flex-basis from: it collapses to 0x0 and `flex: none` never grows it, so
+   a missing rule here makes the mark VANISH rather than overflow. 13px is
+   what ICON.folder drew before, so the top bar keeps its geometry. */
+.repo-chip-icon svg { width: 13px; height: 13px; }
 .repo-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- toolbar popovers ---- */
@@ -4991,6 +5031,10 @@ body.session-superseded .msg-edit-btn {
 }
 .repo-row-main:disabled { cursor: default; }
 .repo-row-icon { display: inline-flex; flex: none; color: var(--vscode-descriptionForeground); }
+/* Same as the chip: viewBox-only marks collapse to 0x0 in a flex host
+   without this. 13px is what ICON.folder drew here before; a worktree row
+   still draws ICON.gitBranch, which brings its own 14px. */
+.repo-row-icon svg { width: 13px; height: 13px; }
 .repo-row-copy { min-width: 0; display: flex; flex-direction: column; }
 .repo-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .repo-row-meta { color: var(--vscode-descriptionForeground); font-size: 11px; margin-top: 2px; }

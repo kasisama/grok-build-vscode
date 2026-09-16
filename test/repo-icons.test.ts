@@ -82,3 +82,67 @@ describe("project mark catalogue", () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 });
+
+/**
+ * Every host that draws a mark must SIZE it, and the two rails must agree.
+ *
+ * `marks.svg()` emits a viewBox-only `<svg>` on purpose -- the comment on it
+ * says the hosts size it through CSS, as they do for every other icon. That
+ * makes the sizing rule part of the contract rather than a detail, and a host
+ * that forgets it does not degrade gracefully: inside a flex host (the chip and
+ * the switcher row are both `display: inline-flex`) an unsized svg has no
+ * intrinsic size to resolve a flex-basis from, so it collapses to 0x0 and
+ * `flex: none` never grows it -- the mark VANISHES. In a non-flex host the same
+ * omission renders it at 72px instead. One missing rule, two opposite symptoms,
+ * neither visible to a suite that only asks which path data was drawn.
+ *
+ * Measured, before the rules below existed: chip 0x0, switcher row 0x0, rail
+ * 14x14. The glyph the first two replaced (ICON.folder) carried width="13"
+ * height="13" on the element, which is why nothing had needed a rule before.
+ */
+describe("the marks are sized wherever they are drawn", () => {
+  const chatCss = read("../media/chat.css");
+  const railCss = read("../media/projects-rail.css");
+
+  // A mark host, and the stylesheet that has to size it. The rail and the panel
+  // title were already right; the chip and the switcher row are what shipped
+  // broken, and a fifth host added later belongs in this table.
+  const hosts: [string, string, string][] = [
+    ["rail twisty (desktop + phone)", chatCss, "rail-twisty"],
+    ["rail twisty (VS Code side bar)", railCss, "rail-twisty"],
+    ["composer chip", chatCss, "repo-chip-icon"],
+    ["project switcher row", chatCss, "repo-row-icon"],
+  ];
+
+  it.each(hosts)("%s sizes the svg it hosts", (_label, css, cls) => {
+    // Read the declaration block rather than pattern-matching the whole file:
+    // a regex built by interpolating the class name needs its escapes doubled
+    // through a template literal, and getting that wrong yields a pattern that
+    // silently matches nothing -- a test that passes for the wrong reason is
+    // worse here than no test, since this whole block exists to catch silence.
+    const at = css.indexOf(`.${cls} svg {`);
+    expect(at, `${cls}: no rule sizes the svg this host draws`).toBeGreaterThan(-1);
+    const block = css.slice(at, css.indexOf("}", at));
+    const width = /width:\s*([^;]+)/.exec(block)?.[1]?.trim();
+    expect(width, `${cls}: its svg rule sets no width`).toBeTruthy();
+    expect(width).not.toMatch(/^(auto|0)$/);
+  });
+
+  it("gives a conversation under a project a deeper indent than one under Pinned", () => {
+    // Both rails, because they are the same geometry and the owner reported the
+    // flat version of this from a phone -- which is chat.css, not the side bar.
+    for (const css of [chatCss, railCss]) {
+      expect(css).toMatch(/--rail-indent-nested:\s*32px/);
+      expect(css).toMatch(/\.rail-sessions\s+\.rail-session\s*\{[^}]*padding-left:\s*var\(--rail-indent-nested\)/);
+    }
+  });
+
+  it("gives the chevron a fixed box, so expanding does not shift the row", () => {
+    // chevronRight is 14px and chevronDown is 12px, so without a box of its own
+    // the mark and the name step sideways on every fold.
+    for (const css of [chatCss, railCss]) {
+      expect(css).toMatch(/\.rail-chevron\s*\{[^}]*width:\s*16px/);
+      expect(css).toMatch(/\.rail-chevron\s+svg\s*\{[^}]*width:\s*12px/);
+    }
+  });
+});
