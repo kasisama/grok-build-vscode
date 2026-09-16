@@ -161,8 +161,16 @@ drop the first arch (electron-builder issue #5592).
 4. Check or download fails (offline, 404, malformed yml, hash mismatch,
    network drop): log only, then run the phase-1 GitHub notice. The rail
    shows **Update available** and opens the download page.
-5. Unpackaged `npm run desktop`, Linux, or a missing feed: phase-1 notice
-   only.
+5. Unpackaged `npm run desktop`, a missing feed, or an updater that declines
+   to act: phase-1 notice only. The third case is Linux-specific and is NOT an
+   error — `checkForUpdates()` resolves null without throwing when
+   `process.env.APPIMAGE` is unset, so the check path treats a null result the
+   same as a thrown one. That covers a desk user who ran
+   `--appimage-extract` instead of the file (the usual workaround where
+   `libfuse2` is missing), who would otherwise be told nothing at all, having
+   been told before the Linux channel existed. It also covers a cloud machine,
+   harmlessly: `updateAvailable` is host-local outbound and every client there
+   is a remote, so the notice reaches nobody.
 6. No new persistent state beyond what electron-updater writes itself
    (its cache under userData).
 

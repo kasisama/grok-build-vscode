@@ -370,7 +370,16 @@ describe("update state machine", () => {
 });
 
 function fakeUpdater(script?: {
-  check?: () => Promise<void>;
+  check?: () => Promise<unknown>;
+  /**
+   * Model `checkForUpdates()` resolving null -- electron-updater's documented
+   * "the updater is disabled" answer, returned WITHOUT throwing. On Linux that
+   * is an unset `process.env.APPIMAGE`: a cloud machine, or a desk user who
+   * extracted the AppImage because their distro has no libfuse2. The fake
+   * returned undefined for every call before this, which modelled that state
+   * by accident and so could never assert anything about it.
+   */
+  declines?: boolean;
   quit?: () => void;
 }): DesktopAutoUpdater & {
   feed: { provider: "generic"; url: string } | null;
@@ -401,6 +410,9 @@ function fakeUpdater(script?: {
     },
     async checkForUpdates() {
       if (script?.check) return script.check();
+      // An ACTIVE updater answers with a result object. Returning undefined
+      // here would be the "disabled" answer, which is a different branch.
+      return script?.declines ? null : { updateInfo: { version: "9.9.9" } };
     },
     quitAndInstall(isSilent, isForceRunAfter) {
       this.quitCalls.push({ isSilent, isForceRunAfter });
@@ -426,7 +438,7 @@ describe("attachDesktopAutoUpdate", () => {
   it("does not build the updater on unpackaged Linux — the constructor would throw", () => {
     let built = 0;
     const session = attachDesktopAutoUpdate({
-      updater: () => { built += 1; return fakeUpdater({ async check() {} }); },
+      updater: () => { built += 1; return fakeUpdater({ async check() { return {}; } }); },
       platform: "linux",
       currentVersion: "0.0",
       packaged: false,
@@ -439,7 +451,7 @@ describe("attachDesktopAutoUpdate", () => {
   it("does not touch the injected updater on a platform that has no feed", () => {
     let built = 0;
     const session = attachDesktopAutoUpdate({
-      updater: () => { built += 1; return fakeUpdater({ async check() {} }); },
+      updater: () => { built += 1; return fakeUpdater({ async check() { return {}; } }); },
       platform: "freebsd",
       currentVersion: "4.6.1",
       packaged: true,
@@ -451,7 +463,7 @@ describe("attachDesktopAutoUpdate", () => {
 
   it("points a packaged Linux build at the AppImage feed", async () => {
     const updater = fakeUpdater({
-      async check() { updater.emit("update-not-available"); },
+      async check() { updater.emit("update-not-available"); return {}; },
     });
     const session = attachDesktopAutoUpdate({
       updater: () => updater,
@@ -464,6 +476,35 @@ describe("attachDesktopAutoUpdate", () => {
     expect(updater.setFeedCalls).toBe(1);
     expect(updater.feed).toEqual({ provider: "generic", url: "https://afkpilot.com/update/linux/" });
     expect(session.getState().phase).toBe("idle");
+  });
+
+  // The regression this exists to stop: the SAME structural property that keeps
+  // a cloud machine off the feed also catches a desk user who extracted the
+  // AppImage rather than running it -- the usual workaround on a distro with no
+  // libfuse2. Before the Linux channel they got the phase-1 notice, because the
+  // code went straight to the fallback when no feed existed. Once a feed exists
+  // the check runs, resolves null WITHOUT throwing, and a catch-only fallback
+  // would leave them silently on an old version for good.
+  it("still notices an update when the updater declines to act", async () => {
+    const notices: string[] = [];
+    const updater = fakeUpdater({ declines: true });
+    const session = attachDesktopAutoUpdate({
+      updater: () => updater,
+      platform: "linux",
+      currentVersion: "4.6.1",
+      packaged: true,
+      ui: {
+        postNotice: (version) => notices.push(version),
+        postReady: () => {},
+        log: () => {},
+        fetchNotice: async () => ({ version: "4.7.0", url: "https://afkpilot.com/desktop-update" }),
+      },
+    });
+    await session.check();
+    // It did configure the feed and did ask -- this is not the "no feed" path.
+    expect(updater.setFeedCalls).toBe(1);
+    // and it still told the user, exactly as 4.6.1 did.
+    expect(notices).toEqual(["4.7.0"]);
   });
 
   it("builds the injected updater at most once, and only when it is used", async () => {
@@ -549,6 +590,9 @@ describe("attachDesktopAutoUpdate", () => {
       async check() {
         updater.emit("update-available", { version: "3.8.0" });
         updater.emit("error", new Error("hash"));
+        // An ACTIVE updater answers with a result even when the download it
+        // started then failed; undefined here would mean "disabled" instead.
+        return {};
       },
     });
     const notices: string[] = [];

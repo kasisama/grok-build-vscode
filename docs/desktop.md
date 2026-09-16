@@ -166,6 +166,14 @@ check to stay safe.** `AppImageUpdater.isUpdaterActive()` returns false unless
 notice. A desk user who ran the file normally gets a real in-place update.
 Keep that structural: a cloud check here would be one more thing to keep true.
 
+**A desk user can land in the same state, and still hears about updates.**
+`APPIMAGE` is unset whenever the AppImage was extracted rather than run — which
+is what somebody does when their distro has no `libfuse2`. The check treats a
+null result like a failed one and falls back to the **Update available**
+notice, so they are told a new version exists even though nothing can install
+itself. That is one branch, not a platform check, and it is why a cloud
+machine needs no exemption from it.
+
 `electron-builder.yml` has a generic `publish` block per platform so
 `latest.yml` / `latest-mac.yml` / `latest-linux.yml` are generated; `dist*`
 still uses `--publish never` and

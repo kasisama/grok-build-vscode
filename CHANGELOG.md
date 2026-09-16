@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.7.0 — 2026-09-16
+
+**Linux is a platform we offer, not just one we use.** The desktop app has built a Linux AppImage on every release since 4.5.2 — it is what Cloud machines run — but it was never offered to anyone, and the few people who found it got no updates. Both halves are fixed. Nothing changes in the VS Code extension itself; this release is the desktop app and the download page.
+
+### Added
+
+- **Grok Build Desktop for Linux, offered properly.** The download page recognises a Linux machine and gives you the AppImage, with the two things you actually need to run one: make it executable, and have FUSE installed (`libfuse2` on Debian and Ubuntu). A phone gets told an AppImage will not run there rather than being handed one — every Android browser calls itself Linux, and Chrome OS cannot run one either.
+
+- **Linux desktop builds keep themselves up to date.** Packaged Linux builds now use the same update feed Windows and macOS have had since the feature shipped: a new version downloads quietly in the background and installs when you quit, or when you click **Restart to update**. Before this there was no Linux feed at all, so the app fell back to a notice that sent you to a page which did not recognise the operating system it had sent you from — a dead end that looked like a download link.
+
+  **If you are already running it, one manual replace gets you onto that.** A build can only update itself if it carries the feed, and no release before this one did. So on 4.6.1 or earlier: download the AppImage once more and replace the file you have. After that it stays current on its own. **Windows and macOS are unaffected** — they have had a real feed all along.
+
+  If you run the AppImage **extracted** rather than as a file — what you do when your distro has no `libfuse2` — nothing can install itself in place, so the app tells you a new version is out and you replace it by hand, exactly as before.
+
 ## 4.6.1 — 2026-09-16
 
 Four fixes, each one the same shape: something the app recorded once and kept trusting after it had stopped being true.

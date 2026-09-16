@@ -465,7 +465,24 @@ export function attachDesktopAutoUpdate(opts: {
         return;
       }
       try {
-        await updater().checkForUpdates();
+        // `null` means the updater declined to act, and electron-updater says
+        // so without throwing -- so this is NOT covered by the catch below.
+        // On Linux that is `AppImageUpdater.isUpdaterActive()` returning false
+        // because `process.env.APPIMAGE` is unset, which happens whenever the
+        // AppImage was EXTRACTED rather than run: a cloud machine always, and a
+        // desk user who ran `--appimage-extract` because their distro has no
+        // libfuse2 -- the usual workaround, and Ubuntu 22.04+ ships without it.
+        //
+        // That desk user got the phase-1 notice before this channel existed,
+        // and silence would be a regression for exactly the people least able
+        // to run the file normally. So a declining updater falls back like a
+        // failing one.
+        //
+        // This needs no cloud check and must not grow one. `updateAvailable` is
+        // host-local outbound, and every client of a cloud host is a remote, so
+        // the notice this posts there reaches nobody.
+        const result = await updater().checkForUpdates();
+        if (!result) await fallbackNotice();
       } catch (e) {
         opts.ui.log(`[update] check failed: ${updaterLogLine(e)}`);
         apply({ type: "error" });
