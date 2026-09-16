@@ -976,7 +976,7 @@ export type HostMsg =
   // conversation OUT of the project you would otherwise have to open first, so
   // no repo-scoped frame can answer it. Entries carry their own `cwd`, which is
   // what lets a row name its repo and reopen in the right checkout.
-  | { type: "pinnedSessions"; entries: SessionListEntry[]; dots: Record<string, Dot> }
+  | { type: "pinnedSessions"; entries: SessionListEntry[]; dots: Record<string, Dot>; pinRequests?: boolean; requestId?: string }
   // `canAddProject` is how the VS Code projects rail learns it may offer "Add
   // project": that view is resolved on its own and gets no `initialState`, so it
   // has no `capabilities` to read. Optional and additive — a client that never
@@ -1267,7 +1267,7 @@ export type WebviewMsg =
   // `cwd` names the session's own checkout so the host can find it without
   // assuming it lives in the repo the tab happens to be in — pinning is offered
   // on every rail row, including other projects' conversations.
-  | { type: "toggleSessionPin"; id: string; cwd?: string; pinned: boolean }
+  | { type: "toggleSessionPin"; id: string; cwd?: string; pinned: boolean; requestId?: string }
   | { type: "selectRepo"; cwd: string }
   | { type: "toggleRepoPin"; cwd: string; pinned: boolean }
   // Where a project sits in the remote client's rail. Both answers are sent:

@@ -493,6 +493,16 @@ export class AcpClient extends EventEmitter {
         current.reasoningEffort = requestedEffort;
       }
     }
+    // Grok's TOML default can override the spawn flag in session/new's
+    // effective state. Apply the preference to the session itself before its
+    // catalog reaches the picker (#162, #164).
+    if (requestedEffort && this.provider === "grok" && this.currentModelSupportsEffort()) {
+      try {
+        await this.setReasoningEffort(requestedEffort);
+      } catch (err) {
+        this.opts.log(`[acp] Failed to set reasoning effort to ${requestedEffort}: ${(err as Error).message}.`);
+      }
+    }
     this.emit("session", res);
 
     if (modelId && modelId !== this.currentModelId) {
@@ -1586,6 +1596,8 @@ export class AcpClient extends EventEmitter {
           if (typeof upd.model_id === "string" && upd.model_id) {
             this.currentModelId = resolveModelId(upd.model_id, this.availableModels) ?? upd.model_id;
           }
+          const current = this.availableModels.find((model) => model.modelId === this.currentModelId);
+          if (current) current.reasoningEffort = this.currentReasoningEffort;
         }
         this.emit("xaiNotification", params?.update);
         if (id != null) this.respondOk(id, {});

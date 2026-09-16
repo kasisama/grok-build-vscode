@@ -293,6 +293,7 @@ function parseRemoteWebviewMsg(msg: unknown): WebviewMsg | null {
     case "toggleSessionPin":
       return isRemoteSessionId(value.id) &&
         typeof value.pinned === "boolean" &&
+        (value.requestId === undefined || (typeof value.requestId === "string" && value.requestId.length <= 128)) &&
         (value.cwd === undefined || isRemoteCwd(value.cwd))
         ? msg as WebviewMsg
         : null;

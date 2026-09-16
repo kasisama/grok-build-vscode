@@ -782,6 +782,47 @@ describe("projects rail", () => {
     const pinned = (id: string, cwd: string, name: string, at: number) =>
       ({ ...row(id, cwd, name), pinnedAt: at });
 
+    it("pins immediately, preserves a newer unpin through stale replies, and fixes cached row controls", () => {
+      const { doc, window, posted } = boot("/work/alpha");
+      const a = row("a1", "/work/alpha", "alpha one", 9);
+      dispatch(window, { ...pinnedFrame([]), pinRequests: true });
+      dispatch(window, sessionsFrame([a]));
+      click(window, doc.querySelector('.rail-repo [data-session-id="a1"] .rail-pin-btn') as HTMLElement);
+      expect(doc.querySelector('.rail-pinned [data-session-id="a1"]')).not.toBeNull();
+      expect(doc.querySelector('.rail-repo [data-session-id="a1"] .rail-pin-btn')?.getAttribute("title")).toBe("Unpin conversation");
+      const pin = posted.find((m) => m.type === "toggleSessionPin")!;
+      expect(pin.requestId).toEqual(expect.any(String));
+      click(window, doc.querySelector('.rail-pinned [data-session-id="a1"] .rail-pin-btn') as HTMLElement);
+      const unpin = posted.filter((m) => m.type === "toggleSessionPin")[1];
+      expect(unpin.pinned).toBe(false);
+      expect(doc.querySelector(".rail-pinned")).toBeNull();
+      dispatch(window, { ...pinnedFrame([{ ...a, pinnedAt: 10 }]), pinRequests: true, requestId: pin.requestId });
+      expect(doc.querySelector(".rail-pinned")).toBeNull();
+      dispatch(window, { ...pinnedFrame([]), pinRequests: true, requestId: unpin.requestId });
+      dispatch(window, sessionsFrame([{ ...a, pinnedAt: 10 }]));
+      expect(doc.querySelector('.rail-repo [data-session-id="a1"] .rail-pin-btn')?.getAttribute("title")).toBe("Pin conversation");
+    });
+
+    it("does not resurrect a deleted conversation from a pending pin", () => {
+      const { doc, window } = boot("/work/alpha");
+      dispatch(window, { ...pinnedFrame([]), pinRequests: true });
+      dispatch(window, sessionsFrame([row("a1", "/work/alpha", "one", 9)]));
+      click(window, doc.querySelector('.rail-repo [data-session-id="a1"] .rail-pin-btn') as HTMLElement);
+      dispatch(window, { type: "sessionRemoved", id: "a1" });
+      expect(doc.querySelector('[data-session-id="a1"]')).toBeNull();
+    });
+
+    it("rolls back a refused pin and leaves another pending pin visible", () => {
+      const { doc, window, posted } = boot("/work/alpha");
+      dispatch(window, { ...pinnedFrame([]), pinRequests: true });
+      dispatch(window, sessionsFrame([row("a1", "/work/alpha", "one", 9), row("a2", "/work/alpha", "two", 8)]));
+      for (const id of ["a1", "a2"]) click(window, doc.querySelector(`.rail-repo [data-session-id="${id}"] .rail-pin-btn`) as HTMLElement);
+      const requests = posted.filter((m) => m.type === "toggleSessionPin");
+      dispatch(window, { ...pinnedFrame([]), pinRequests: true, requestId: requests[0].requestId });
+      expect(doc.querySelector('.rail-pinned [data-session-id="a1"]')).toBeNull();
+      expect(doc.querySelector('.rail-pinned [data-session-id="a2"]')).not.toBeNull();
+    });
+
     it("shows no Pinned group until something is pinned", () => {
       const { doc } = boot();
       expect([...doc.querySelectorAll(".rail-head-title")].map((e) => e.textContent)).toEqual(["Projects"]);

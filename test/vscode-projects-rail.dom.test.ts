@@ -456,6 +456,25 @@ describe("VS Code projects rail renderer", () => {
   });
 
   describe("Pinned", () => {
+    it("updates pinning immediately and ignores acknowledgements of superseded clicks", () => {
+      const { window, doc, posted } = h;
+      const api = railApi(window);
+      loadCatalog(api, "/work/alpha");
+      const a = row("a1", "/work/alpha", "here", 10);
+      loadSessions(api, [a]);
+      api.onMessage({ type: "pinnedSessions", entries: [], dots: {}, pinRequests: true });
+      (doc.querySelector('.rail-repo [data-session-id="a1"] .rail-pin-btn') as HTMLElement).click();
+      expect(doc.querySelector('.rail-pinned [data-session-id="a1"]')).not.toBeNull();
+      const pin = posted.find((m) => m.type === "toggleSessionPin")!;
+      (doc.querySelector('.rail-pinned .rail-pin-btn') as HTMLElement).click();
+      const unpin = posted.filter((m) => m.type === "toggleSessionPin")[1];
+      api.onMessage({ type: "pinnedSessions", entries: [{ ...a, pinnedAt: 10 }], dots: {}, pinRequests: true, requestId: pin.requestId });
+      expect(doc.querySelector('.rail-pinned')).toBeNull();
+      api.onMessage({ type: "pinnedSessions", entries: [], dots: {}, pinRequests: true, requestId: unpin.requestId });
+      loadSessions(api, [{ ...a, pinnedAt: 10 } as typeof a]);
+      expect(doc.querySelector('.rail-repo [data-session-id="a1"] .rail-pin-btn')?.getAttribute("title")).toBe("Pin conversation");
+    });
+
     it("shows no Pinned group until the pinnedSessions frame arrives", () => {
       const { window, doc } = h;
       const api = railApi(window);

@@ -318,6 +318,7 @@ export function parseWebviewMsg(raw: unknown): WebviewMsg | null {
       break;
     case "toggleSessionPin":
       if (!isString(raw.id) || !isBoolean(raw.pinned)) return null;
+      if (!opt(raw.requestId, isString) || (typeof raw.requestId === "string" && raw.requestId.length > 128)) return null;
       if (!opt(raw.cwd, isString)) return null;
       break;
     case "selectRepo":

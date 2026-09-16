@@ -4921,6 +4921,57 @@
   const pendingRepoColor = createPendingOverlay({
     onExpire() { renderRail(); },
   });
+  const pendingPins = new Map();
+  let pinSequence = 0;
+  let pinRequests = false;
+
+  function pinnedRows() {
+    const rows = new Map(state.pinnedSessions.map((row) => [row.id, row]));
+    for (const [id, pending] of pendingPins) {
+      if (pending.pinned) rows.set(id, pending.row);
+      else rows.delete(id);
+    }
+    return [...rows.values()].sort((a, b) => (b.pinnedAt || 0) - (a.pinnedAt || 0));
+  }
+
+  function sessionIsPinned(row) {
+    const pending = pendingPins.get(row.id);
+    if (pending) return pending.pinned;
+    return state.pinnedSessionsKnown
+      ? state.pinnedSessions.some((entry) => entry.id === row.id)
+      : typeof row.pinnedAt === "number";
+  }
+
+  function togglePinnedRow(row, cwd) {
+    const pinned = !sessionIsPinned(row);
+    const requestId = pinRequests ? `pin-${Date.now()}-${++pinSequence}-${Math.random().toString(36).slice(2)}` : undefined;
+    const previous = pendingPins.get(row.id);
+    if (previous) clearTimeout(previous.timer);
+    const pending = { pinned, requestId, row: { ...row, cwd, pinnedAt: Date.now() } };
+    pending.timer = setTimeout(() => {
+      if (pendingPins.get(row.id) !== pending) return;
+      pendingPins.delete(row.id);
+      renderRail();
+    }, 30000);
+    pendingPins.set(row.id, pending);
+    renderRail();
+    vscode.postMessage({ type: "toggleSessionPin", id: row.id, cwd, pinned,
+      ...(requestId ? { requestId } : {}) });
+  }
+
+  function settlePendingPins(msg) {
+    pinRequests = msg.pinRequests === true;
+    for (const [id, pending] of pendingPins) {
+      const settled = pending.requestId
+        ? pending.requestId === msg.requestId
+        : state.pinnedSessions.some((row) => row.id === id) === pending.pinned;
+      if (settled) {
+        clearTimeout(pending.timer);
+        pendingPins.delete(id);
+      }
+    }
+  }
+
   const pendingRename = createPendingOverlay({
     onExpire() { paintSessionSurfaces(); },
   });
@@ -6700,7 +6751,7 @@
     // PINNED is not collapsible — that is what pinning means.
     // PROJECT ARCHIVE only mounts when ≥1 project qualifies (put-away or age-quiet);
     // an empty section is deliberately omitted rather than an always-on empty state.
-    const pinned = uniqueSessionRows(state.pinnedSessions).filter(
+    const pinned = uniqueSessionRows(pinnedRows()).filter(
       (s) => railMatches(s.displayName) || railMatches(railRepoLabelFor(s.cwd)),
     );
     if (pinned.length) {
@@ -8167,7 +8218,7 @@
       row.appendChild(where);
     }
 
-    const isPinned = typeof s.pinnedAt === "number";
+    const isPinned = sessionIsPinned(s);
     if (isPinned) row.classList.add("pinned");
 
     // Optimistic new-session placeholder: presentation only. No pin/rename/
@@ -8187,12 +8238,7 @@
         pinBtn.setAttribute("aria-label", pinBtn.title);
         pinBtn.onclick = (e) => {
           e.stopPropagation();
-          vscode.postMessage({
-            type: "toggleSessionPin",
-            id: s.id,
-            cwd: s.cwd || repo.cwd,
-            pinned: !isPinned,
-          });
+          togglePinnedRow(s, s.cwd || repo.cwd);
         };
         actions.appendChild(pinBtn);
       }
@@ -8223,7 +8269,7 @@
    *  cannot click the name of a conversation you are not in. */
   function railSessionMenuItems(s, repo, active, opts) {
     const cwd = s.cwd || repo.cwd;
-    const isPinned = typeof s.pinnedAt === "number";
+    const isPinned = sessionIsPinned(s);
     const items = opts?.inlineRename ? [] : [
       {
         label: "Rename",
@@ -8315,14 +8361,7 @@
       items.push({
         label: isPinned ? "Unpin conversation" : "Pin conversation",
         icon: ICON.pin,
-        onSelect: () => vscode.postMessage({
-          type: "toggleSessionPin",
-          id: s.id,
-          // The row's own cwd, so the host files the pin under the repo this
-          // conversation actually lives in rather than the one we are viewing.
-          cwd,
-          pinned: !isPinned,
-        }),
+        onSelect: () => togglePinnedRow(s, cwd),
       });
     }
     // The open conversation can be deleted too, where the host can do it: it
@@ -19103,6 +19142,9 @@
         const removed = state.sessions.find((s) => s.id === msg.id);
         state.sessions = state.sessions.filter((s) => s.id !== msg.id);
         state.railSelectedRows = state.railSelectedRows.filter((s) => s.id !== msg.id);
+        const pendingPin = pendingPins.get(msg.id);
+        if (pendingPin) clearTimeout(pendingPin.timer);
+        pendingPins.delete(msg.id);
         state.pinnedSessions = state.pinnedSessions.filter((s) => s.id !== msg.id);
         for (const preview of Object.values(state.repoPreviews)) {
           const before = preview.entries.length;
@@ -19266,6 +19308,7 @@
       case "pinnedSessions": {
         state.pinnedSessionsKnown = true;
         state.pinnedSessions = uniqueSessionRows(msg.entries);
+        settlePendingPins(msg);
         state.dots = Object.assign({}, state.dots, msg.dots || {});
         if (settlePendingRename(state.pinnedSessions)) {
           renderSessionName();

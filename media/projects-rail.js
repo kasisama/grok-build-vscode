@@ -215,6 +215,57 @@
   const pendingRepoColor = createPendingOverlay({
     onExpire() { render(); },
   });
+  const pendingPins = new Map();
+  let pinSequence = 0;
+  let pinRequests = false;
+
+  function pinnedRows() {
+    const rows = new Map(state.pinnedSessions.map((row) => [row.id, row]));
+    for (const [id, pending] of pendingPins) {
+      if (pending.pinned) rows.set(id, pending.row);
+      else rows.delete(id);
+    }
+    return [...rows.values()].sort((a, b) => (b.pinnedAt || 0) - (a.pinnedAt || 0));
+  }
+
+  function sessionIsPinned(row) {
+    const pending = pendingPins.get(row.id);
+    if (pending) return pending.pinned;
+    return state.pinnedKnown
+      ? state.pinnedSessions.some((entry) => entry.id === row.id)
+      : typeof row.pinnedAt === "number";
+  }
+
+  function togglePinnedRow(row, cwd) {
+    const pinned = !sessionIsPinned(row);
+    const requestId = pinRequests ? `pin-${Date.now()}-${++pinSequence}-${Math.random().toString(36).slice(2)}` : undefined;
+    const previous = pendingPins.get(row.id);
+    if (previous) clearTimeout(previous.timer);
+    const pending = { pinned, requestId, row: { ...row, cwd, pinnedAt: Date.now() } };
+    pending.timer = setTimeout(() => {
+      if (pendingPins.get(row.id) !== pending) return;
+      pendingPins.delete(row.id);
+      render();
+    }, 30000);
+    pendingPins.set(row.id, pending);
+    render();
+    vscode.postMessage({ type: "toggleSessionPin", id: row.id, cwd, pinned,
+      ...(requestId ? { requestId } : {}) });
+  }
+
+  function settlePendingPins(msg) {
+    pinRequests = msg.pinRequests === true;
+    for (const [id, pending] of pendingPins) {
+      const settled = pending.requestId
+        ? pending.requestId === msg.requestId
+        : state.pinnedSessions.some((row) => row.id === id) === pending.pinned;
+      if (settled) {
+        clearTimeout(pending.timer);
+        pendingPins.delete(id);
+      }
+    }
+  }
+
   const pendingRename = createPendingOverlay({
     onExpire() { render(); },
   });
@@ -766,7 +817,7 @@
     // never a version. An older host that never sends pinnedSessions shows no
     // group rather than an empty one.
     if (state.pinnedKnown) {
-      const pinned = uniqueSessionRows(state.pinnedSessions).filter(
+      const pinned = uniqueSessionRows(pinnedRows()).filter(
         (s) => matchesFilter(s.displayName) || matchesFilter(repoLabelFor(s.cwd)),
       );
       if (pinned.length) {
@@ -1576,7 +1627,7 @@
       row.appendChild(where);
     }
 
-    const isPinned = typeof s.pinnedAt === "number";
+    const isPinned = sessionIsPinned(s);
     if (isPinned) row.classList.add("pinned");
 
     const actions = document.createElement("div");
@@ -1591,12 +1642,7 @@
       pinBtn.setAttribute("aria-label", pinBtn.title);
       pinBtn.onclick = (e) => {
         e.stopPropagation();
-        vscode.postMessage({
-          type: "toggleSessionPin",
-          id: s.id,
-          cwd: s.cwd || repo.cwd,
-          pinned: !isPinned,
-        });
+        togglePinnedRow(s, s.cwd || repo.cwd);
       };
       actions.appendChild(pinBtn);
     }
@@ -1630,12 +1676,7 @@
           label: isPinned ? "Unpin conversation" : "Pin conversation",
           disabled: !state.pinnedKnown,
           onSelect: () =>
-            vscode.postMessage({
-              type: "toggleSessionPin",
-              id: s.id,
-              cwd,
-              pinned: !isPinned,
-            }),
+            togglePinnedRow(s, cwd),
         },
         null,
         {
@@ -1787,6 +1828,9 @@
       case "sessionRemoved": {
         if (!msg.id) break;
         state.currentSessions = state.currentSessions.filter((s) => s.id !== msg.id);
+        const pendingPin = pendingPins.get(msg.id);
+        if (pendingPin) clearTimeout(pendingPin.timer);
+        pendingPins.delete(msg.id);
         state.pinnedSessions = state.pinnedSessions.filter((s) => s.id !== msg.id);
         for (const preview of Object.values(state.previews)) {
           const before = preview.entries.length;
@@ -1833,6 +1877,7 @@
       }
       case "pinnedSessions": {
         state.pinnedSessions = uniqueSessionRows(msg.entries);
+        settlePendingPins(msg);
         state.pinnedKnown = true;
         settlePendingRename(state.pinnedSessions);
         if (msg.dots && typeof msg.dots === "object") {

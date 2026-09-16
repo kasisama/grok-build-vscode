@@ -1185,7 +1185,7 @@ export class GrokSidebar {
     this.providerConnectionState = this.migrateProviderConnections();
     this.focused.provider = this.defaultProviderForProject(this.workspaceRoot());
     this.remoteClients = new RemoteClientState<Session, RemoteBrowserPreferences>(
-      this.workspaceRoot(),
+      () => this.defaultRemoteCwd(),
       normalizeRepoPath,
     );
     context.subscriptions.push(
@@ -4994,6 +4994,14 @@ Only continue if you trust this code.`,
     return process.cwd();
   }
 
+  /** New remote tabs follow the current open set, never the app's startup folder. */
+  private defaultRemoteCwd(): string {
+    const authorized = this.authorizedSessionCwds();
+    return authorizedListCwd(this.workspaceRoot(), authorized, pathsEqual)
+      ?? this.openWorkspaceFolders().find((cwd) => authorizedListCwd(cwd, authorized, pathsEqual))
+      ?? "";
+  }
+
   /** Effective cwd for a session (worktree path or workspace root). */
   private sessionCwd(session: Session = this.focused): string {
     return session.cwd || this.workspaceRoot();
@@ -7768,12 +7776,11 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
       else next[id] = entry;
       return next;
     });
-    // The pin lives in globalState, not in the session's summary.json, so the
-    // file's mtime does not move and the entry cache would keep serving a row
-    // with the OLD pin state — the pin control would then still say "Pin" right
-    // after pinning, and clicking it would pin again instead of unpinning. Same
-    // reason `customName` invalidates here: an override changes the entry
-    // without touching disk.
+    // Pins, like customName, live in globalState without changing disk mtimes.
+    // Without invalidation, buildPinnedSessions sorts by stale pinnedAt values,
+    // so a new pin can appear below older pins. The pendingPins overlay hides
+    // this only in the initiating view until acknowledgement or expiry;
+    // other views and the settled client still need fresh host rows.
     this.sessionCache.delete(id);
     this.postSessionsList(); // fans out the pinned refresh too
   }
@@ -7880,7 +7887,15 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     const cachedAdapterIds = new Set(
       [...this.allAdapterCatalogs()].flat().map((entry) => entry.id),
     );
-    for (const { cwd, ids } of byCwd.values()) {
+    for (const { cwd, ids: bucketIds } of byCwd.values()) {
+      const ids: string[] = [];
+      for (const id of bucketIds) {
+        const live = [...this.pool].find((session) => session.activeSessionId === id);
+        const entry = live && this.liveSessionEntry(live, id, this.sessionCwd(live), overrides);
+        if (entry && entry.cwd && sessionCwdBelongsToRepo(entry.cwd, [cwd], pathsEqual)) {
+          entries.push({ ...entry, pinnedAt: overrides[id]?.pinnedAt });
+        } else ids.push(id);
+      }
       const adapterIds = new Set(ids.filter((id) => {
         const provider = overrides[id]?.provider;
         return (provider && isAdapterProvider(provider)) || cachedAdapterIds.has(id);
@@ -7926,12 +7941,12 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     return { entries: filtered, dots };
   }
 
-  private postPinnedSessions(clientId?: string): void {
+  private postPinnedSessions(clientId?: string, requestId?: string): void {
     const hasRemote = this.remoteClients.clients().length > 0;
     // Desktop multi-folder rail OR the VS Code primary-side-bar projects view.
     const hasLocalRail = this.host.canSwitchWorkspaceFolder || !!this.projectsRail;
     if (!clientId && !hasRemote && !hasLocalRail) return;
-    const message: HostMsg = { type: "pinnedSessions", ...this.buildPinnedSessions() };
+    const message: HostMsg = { type: "pinnedSessions", ...this.buildPinnedSessions(), pinRequests: true, ...(requestId ? { requestId } : {}) };
     if (clientId) {
       this.sendRemoteClient(clientId, message);
       return;
@@ -9717,7 +9732,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     const configAutoApprove = session.provider === "grok" && this.configForcesAutoApprove(this.sessionCwd(session));
     session.autoApprove = rememberedYolo || configAutoApprove;
     session.planActive = false;
-    session.hasHistory = false;
+    session.hasHistory = !!resumeId;
     session.suppressContent = false;
     session.captureAgentText = undefined;
     session.lastSessionInfoAt = 0;
@@ -9923,7 +9938,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
       this.emit(session, {
         type: "session",
         sessionId: res.sessionId,
-        models: this.modelsForSession(session, client.availableModels, client.currentModelId, !resumeId),
+        models: this.modelsForSession(session, client.availableModels, client.currentModelId, !resumeId || (session.historyEventCount === 0 && session.userMessageCount === 0)),
         currentModelId: client.currentModelId,
         worktree: !!session.worktree,
         provider: session.provider,
@@ -10506,7 +10521,6 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         clock.record("replay(post)", clock.elapsed(replayAt));
         session.activeSessionId = resumeId;
         session.titleGenerated = true; // existing session, name already in storage
-        session.hasHistory = true;
 
         // Plan-gate restoration: the CLI replays its own current_mode_update
         // events during loadSession, which our modeChanged handler honors by
@@ -11888,7 +11902,13 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         // Rail pin. Remote always; local when any projects rail is live
         // (desktop multi-folder or VS Code primary-side-bar view).
         if (origin === "remote" || this.host.canSwitchWorkspaceFolder || this.projectsRail) {
-          await this.toggleSessionPin(msg.id, msg.cwd, msg.pinned);
+          try {
+            await this.toggleSessionPin(msg.id, msg.cwd, msg.pinned);
+          } catch (error) {
+            this.reportRequester(requester, "error", `Could not save pin: ${(error as Error).message}`);
+          } finally {
+            this.postPinnedSessions(undefined, msg.requestId);
+          }
         }
         break;
       case "selectRepo":
@@ -17633,7 +17653,12 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     // Join an in-flight load rather than superseding it: session/load cannot
     // be aborted, and a second stream would interleave into the same buffer.
     // `replaying` stays a boolean so remotes still see "any replay in progress".
-    await runExclusiveHistoryLoad(session, load, {
+    await runExclusiveHistoryLoad(session, async () => {
+      await load();
+      // A saved id may still be an untouched shell. Only a successful replay
+      // can prove that; failed loads retain the provider lock.
+      session.hasHistory = session.historyEventCount > 0 || session.userMessageCount > 0;
+    }, {
       onStart: () => this.emit(session, { type: "historyReplay", active: true }),
       onFinish: () => {
         this.emit(session, { type: "historyReplay", active: false });
@@ -19248,7 +19273,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     const clock = new OpenClock();
     const load = this.reserveSessionLoad(id, this.remoteClients.tabToken(clientId));
     if (!load) {
-      const selectedCwd = this.remoteClients.cwd(clientId);
+      const selectedCwd = this.remoteClients.cwdIfPresent(clientId) ?? "";
       this.host.appendLine(`[remote] dropped resumeSession (session load is reserved by another view)`);
       this.refuseRemoteResume(
         clientId,
@@ -19288,9 +19313,9 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     sessionCwd: string | undefined,
     overrides: SessionMetaOverrides,
   ): string {
-    const selectedCwd = this.remoteClients.cwd(clientId);
+    const selectedCwd = this.remoteClients.cwdIfPresent(clientId) ?? "";
     if (!sessionCwd) return selectedCwd;
-    if (sessionCwdBelongsToRepo(sessionCwd, this.sessionCwdsForRepo(selectedCwd, overrides), pathsEqual)) {
+    if (selectedCwd && sessionCwdBelongsToRepo(sessionCwd, this.sessionCwdsForRepo(selectedCwd, overrides), pathsEqual)) {
       return selectedCwd;
     }
     const owner = this.repoCatalog().find((repo) =>
@@ -20036,14 +20061,19 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
             type: "repoSessions", cwd: m.cwd, entries: [], dots: {}, total: 0,
             error: "project-unavailable",
           });
+        } else if (m.type === "resumeSession") {
+          this.sendRemoteClient(clientId, {
+            type: "error",
+            text: "That conversation's project folder is no longer open on the desktop. Select another project to continue.",
+            resumeFailed: { id: m.id },
+          });
         }
         return;
       }
-      // Messages with no cwd still act on a bound session / client-selected
-      // repo. A closed folder must revoke those ops even when allowRemoteRepoTarget
-      // returns true (its default branch). selectRepo is the escape hatch to a
-      // still-authorized target and is gated only by the message cwd above.
-      if (m.type !== "selectRepo" && m.type !== "listRepoSessions") {
+      // An explicit, authorized destination can leave a stale binding. Messages
+      // acting on the existing conversation (send/cancel/etc.) still require it.
+      const resumesAuthorizedCwd = m.type === "resumeSession" && !!m.cwd;
+      if (m.type !== "selectRepo" && m.type !== "listRepoSessions" && !resumesAuthorizedCwd) {
         const active = this.remoteClients.active(clientId);
         const boundCwd = active
           ? this.sessionCwd(active)
@@ -20060,6 +20090,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
           this.sendRemoteClient(clientId, {
             type: "error",
             text: "That project folder is no longer open on the desktop. Select another project to continue.",
+            ...(m.type === "resumeSession" ? { resumeFailed: { id: m.id } } : {}),
           });
           return;
         }
@@ -20130,8 +20161,17 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     // remoteVoice, so reconnect cannot resurrect a host-only listening state.
     this.dropRemoteVoice(clientId);
     this.remoteClients.ready(clientId);
-    // Empty default cwd (no desktop project yet) is not a bound repo. The
-    // snapshot still goes out unbound; adopting/starting here would throw.
+    // A reconnect can restore a selection/session saved while the folder was
+    // still open. Revalidate before adopting or starting any provider process.
+    const selectedCwd = this.remoteClients.cwdIfPresent(clientId);
+    const active = this.remoteClients.active(clientId);
+    const authorized = this.authorizedSessionCwds();
+    if ((selectedCwd && !authorizedListCwd(selectedCwd, authorized, pathsEqual)) ||
+        (active && !authorizedListCwd(this.sessionCwd(active), authorized, pathsEqual))) {
+      this.remoteClients.deleteActive(clientId);
+      this.remoteClients.select(clientId, this.defaultRemoteCwd());
+    }
+    // With no open project the snapshot stays unbound.
     if (!this.remoteClients.cwdIfPresent(clientId)) return;
     // A tab that lost this conversation to another tab's claim must not
     // adopt the desk session or mint a blank one on reconnect. The snapshot
@@ -20574,7 +20614,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     // remote is answered HERE and never reaches onMessage's switch, so anything
     // pushed from there would simply never arrive on a fresh tab or a reconnect.
     // buildPinnedSessions filters to the live authorized set.
-    snap.push({ type: "pinnedSessions", ...this.buildPinnedSessions() });
+    snap.push({ type: "pinnedSessions", ...this.buildPinnedSessions(), pinRequests: true });
     const out: HostMsg[] = [];
     for (const m of snap) {
       const t = transformHostMsgForRemote(m, this.remoteMediaDeps);
