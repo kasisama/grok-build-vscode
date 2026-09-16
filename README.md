@@ -261,7 +261,7 @@ Grok opens in the **Secondary Side Bar** (right side, next to other AI tools). P
 
 ### Grok Build Desktop
 
-Standalone app for **macOS** (Apple Silicon + Intel) and **Windows** (x64). Same agent UI as the extension; no VS Code required.
+Standalone app for **macOS** (Apple Silicon + Intel), **Windows** (x64) and **Linux** (x86_64 AppImage). Same agent UI as the extension; no VS Code required.
 
 **1. Download** the installer from **[afkpilot.com/desktop](https://afkpilot.com/desktop)** — it detects your platform and offers the right build. Asset names:
 
@@ -270,6 +270,7 @@ Standalone app for **macOS** (Apple Silicon + Intel) and **Windows** (x64). Same
 | macOS Apple Silicon | `Grok-Build-Desktop-<version>-mac-arm64.dmg` |
 | macOS Intel | `Grok-Build-Desktop-<version>-mac-x64.dmg` |
 | Windows x64 | `Grok-Build-Desktop-<version>-win-x64.exe` |
+| Linux x86_64 | `Grok-Build-Desktop-<version>-linux-x86_64.AppImage` |
 
 (Zip archives are also published for macOS: `…-mac-arm64.zip` / `…-mac-x64.zip`.)
 
@@ -278,6 +279,8 @@ Standalone app for **macOS** (Apple Silicon + Intel) and **Windows** (x64). Same
 **macOS is signed and notarised** (since 3.2.7) — the app opens straight from the `.dmg`, with no Gatekeeper warning and nothing to allow through in Settings.
 
 **Windows is not signed yet**, so Microsoft Defender SmartScreen may show “Windows protected your PC.” Choose **More info** → **Run anyway**.
+
+**Linux ships as a single AppImage** — nothing to install. `chmod +x` it and run it; it needs FUSE (`libfuse2` on Debian and Ubuntu). It updates itself in place from then on.
 
 Details, build-from-source, and signing notes: **[docs/desktop.md](docs/desktop.md)**.
 

@@ -81,8 +81,8 @@ chat UI and the same Grok Build CLI:
   extension's agent from your phone or any browser. Pair once from **Remote
   control** in the **+** menu.
 - **[Grok Build Desktop (Community)](https://afkpilot.com/desktop)** — the same
-  agent as a standalone app for Windows and macOS, for machines where you would
-  rather not install an editor. Free.
+  agent as a standalone app for Windows, macOS and Linux, for machines where you
+  would rather not install an editor. Free.
 
 Neither is required, and nothing here depends on them.
 

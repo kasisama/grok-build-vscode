@@ -17,6 +17,7 @@ import {
   initialAppUpdateState,
   isDesktopInstallerAsset,
   isNewerVersion,
+  latestLinuxYmlHasAppImage,
   latestMacYmlHasBothArches,
   latestWinYmlHasInstaller,
   noticeIfUpdateAvailable,
@@ -248,10 +249,23 @@ describe("generic feed URL selection", () => {
     });
   });
 
-  it("has no in-app feed on Linux", () => {
-    expect(desktopUpdateFeedBase("linux")).toBeNull();
-    expect(desktopUpdateFeedConfig("linux")).toBeNull();
-    expect(desktopAutoUpdateEnabled({ platform: "linux", packaged: true })).toBe(false);
+  it("feeds Linux from the AppImage channel", () => {
+    // The same AppImage the cloud machines install. Safe because
+    // AppImageUpdater refuses to run without process.env.APPIMAGE, which an
+    // extracted `squashfs-root` run never has — so a sprite asks this endpoint
+    // nothing while a desk user who ran the file gets a real update.
+    expect(desktopUpdateFeedBase("linux")).toBe("https://afkpilot.com/update/linux/");
+    expect(desktopUpdateFeedConfig("linux")).toEqual({
+      provider: "generic",
+      url: "https://afkpilot.com/update/linux/",
+    });
+    expect(desktopAutoUpdateEnabled({ platform: "linux", packaged: true })).toBe(true);
+  });
+
+  it("has no in-app feed on a platform we do not ship", () => {
+    expect(desktopUpdateFeedBase("freebsd")).toBeNull();
+    expect(desktopUpdateFeedConfig("freebsd")).toBeNull();
+    expect(desktopAutoUpdateEnabled({ platform: "freebsd", packaged: true })).toBe(false);
   });
 
   it("enables the updater only when packaged or forceDev", () => {
@@ -290,6 +304,18 @@ describe("latest.yml dual-arch / installer checks", () => {
     expect(latestWinYmlHasInstaller("path: Grok-Build-Desktop-3.7.0-win-x64.exe.blockmap")).toBe(false);
     expect(latestWinYmlHasInstaller("url: Grok-Build-Desktop-3.7.0-win-x64.exe.blockmap\n")).toBe(false);
     expect(latestWinYmlHasInstaller("path: something.vsix")).toBe(false);
+  });
+
+  it("requires the Linux AppImage name, with the long arch spelling", () => {
+    expect(latestLinuxYmlHasAppImage("path: Grok-Build-Desktop-4.6.1-linux-x86_64.AppImage")).toBe(true);
+    expect(latestLinuxYmlHasAppImage("url: Grok-Build-Desktop-4.6.1-linux-x86_64.AppImage\r")).toBe(true);
+    // `x64` is what every other target uses and what a reasonable person
+    // writes. electron-builder does not, and a pattern built on the guess
+    // matches nothing while looking correct.
+    expect(latestLinuxYmlHasAppImage("path: Grok-Build-Desktop-4.6.1-linux-x64.AppImage")).toBe(false);
+    expect(latestLinuxYmlHasAppImage("path: Grok-Build-Desktop-4.6.1-linux-x86_64.AppImage.zsync")).toBe(false);
+    expect(latestLinuxYmlHasAppImage("path: something.vsix")).toBe(false);
+    expect(latestLinuxYmlHasAppImage("")).toBe(false);
   });
 });
 
@@ -389,10 +415,15 @@ describe("attachDesktopAutoUpdate", () => {
   // GETTER that builds the platform updater on first read; on Linux that is
   // AppImageUpdater, whose constructor rejects the "0.0" version an unpackaged
   // app reports. So `updater: autoUpdater` at the call site threw during
-  // startup — before this function could conclude that Linux has no in-app
-  // updater at all. It took running the desktop host in a container to find,
-  // because Windows and macOS construct happily and ship packaged.
-  it("does not touch the injected updater on a platform that has no feed", () => {
+  // startup — before this function could decide it did not want one. It took
+  // running the desktop host in a container to find, because Windows and macOS
+  // construct happily and ship packaged.
+  //
+  // Linux HAS a feed now, which moved the thing that saves us: it is the
+  // unpackaged branch, not the missing-feed branch, that keeps the thunk
+  // unresolved. The crash is Linux+unpackaged, so that is the case pinned here
+  // — and it must stay pinned even though the feed no longer makes it moot.
+  it("does not build the updater on unpackaged Linux — the constructor would throw", () => {
     let built = 0;
     const session = attachDesktopAutoUpdate({
       updater: () => { built += 1; return fakeUpdater({ async check() {} }); },
@@ -402,6 +433,36 @@ describe("attachDesktopAutoUpdate", () => {
       ui: { postNotice: () => {}, postReady: () => {}, log: () => {}, fetchNotice: async () => null },
     });
     expect(built).toBe(0);
+    expect(session.getState().phase).toBe("idle");
+  });
+
+  it("does not touch the injected updater on a platform that has no feed", () => {
+    let built = 0;
+    const session = attachDesktopAutoUpdate({
+      updater: () => { built += 1; return fakeUpdater({ async check() {} }); },
+      platform: "freebsd",
+      currentVersion: "4.6.1",
+      packaged: true,
+      ui: { postNotice: () => {}, postReady: () => {}, log: () => {}, fetchNotice: async () => null },
+    });
+    expect(built).toBe(0);
+    expect(session.getState().phase).toBe("idle");
+  });
+
+  it("points a packaged Linux build at the AppImage feed", async () => {
+    const updater = fakeUpdater({
+      async check() { updater.emit("update-not-available"); },
+    });
+    const session = attachDesktopAutoUpdate({
+      updater: () => updater,
+      platform: "linux",
+      currentVersion: "4.6.1",
+      packaged: true,
+      ui: { postNotice: () => {}, postReady: () => {}, log: () => {}, fetchNotice: async () => null },
+    });
+    await session.check();
+    expect(updater.setFeedCalls).toBe(1);
+    expect(updater.feed).toEqual({ provider: "generic", url: "https://afkpilot.com/update/linux/" });
     expect(session.getState().phase).toBe("idle");
   });
 
