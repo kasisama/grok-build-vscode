@@ -364,6 +364,14 @@ posted.
   project (the provider-config mount) or a host that published no mark at all. The desktop's
   docked tree reaches it over a `window` bridge, so `npm run e2e:screens` compares the two
   drawn paths in the real app rather than trusting the wiring
+- **A mark with no size is still the right mark** — which is why comparing drawn paths was
+  not enough on its own. `marks.svg()` emits a viewBox-only `<svg>` and every host sizes it
+  in CSS, so `test/repo-icons.test.ts` holds each host to having that rule, and both rails
+  to the nested indent and the chevron's fixed box. The two rails are separate stylesheets
+  implementing one design, and the chip and the switcher row are `display: inline-flex`,
+  where an unsized svg resolves a 0 flex-basis and the mark VANISHES instead of overflowing
+  — invisible to a path comparison, and to a screenshot of a surface where the host is
+  hidden. Measured before the rules existed: chip 0x0, switcher row 0x0, rail 14x14
 - **Search** reaches into Archived and forces it open, rather than answering "No matches"
   while the project sits collapsed below
 - **Global row identity** — duplicate source rows with one session id render once across
