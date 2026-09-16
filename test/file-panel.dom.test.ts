@@ -2361,3 +2361,76 @@ describe("collapsing a folder", () => {
     h.panel.destroy();
   });
 });
+
+/**
+ * The title's icon is the PROJECT's mark, not a folder icon that happens to
+ * look like one.
+ *
+ * Every renderer that names a project draws the same glyph from the same
+ * catalog field; the panel is the one that reaches it through a `ui` hook,
+ * because the panel also mounts over things that are not projects at all (the
+ * provider-config directory), and those must keep their own folder.
+ */
+describe("file panel title mark", () => {
+  const ROCKET = '<svg viewBox="0 -960 960 960"><path d="M263-465q26-69 61-119"/></svg>';
+
+  const mount = (ui: Record<string, unknown>) => {
+    const window = new Window({ url: "https://example.test/" });
+    const document = window.document;
+    const panel = createFilePanel({
+      access: {
+        currentScope: async () => ({ id: "/work/alpha", label: "alpha", title: "/work/alpha" }),
+        list: async () => ({ ok: true, entries: [], truncated: false }),
+      },
+      document,
+      window,
+      mount: { panelHost: document.body, presentation: "overlay" },
+      ui,
+    });
+    panel.setOpen(true);
+    return { window, document, panel };
+  };
+
+  it("draws the project's mark above its files, in the project's hue", async () => {
+    const asked: string[] = [];
+    const h = mount({
+      projectMark: (cwd: string) => { asked.push(cwd); return ROCKET; },
+      projectMarkColor: () => "teal",
+    });
+    await settle();
+    const icon = h.document.querySelector(".gfp-title-icon") as HTMLElement;
+    expect(asked).toContain("/work/alpha");
+    expect(icon.classList.contains("gfp-title-icon-mark")).toBe(true);
+    expect(icon.querySelector("path")?.getAttribute("d")).toBe("M263-465q26-69 61-119");
+    // The hue is carried as an attribute, not a style: one CSS rule tints every
+    // surface that draws a mark, and the panel is one of them.
+    expect(icon.dataset.repoColor).toBe("teal");
+    h.panel.destroy();
+    h.window.happyDOM.abort();
+  });
+
+  it("keeps its own folder for a scope that is not a project", async () => {
+    // What the provider-config mount is: a real directory, no catalog row, so
+    // the hook answers "" and the panel falls back rather than inventing a mark.
+    const h = mount({ projectMark: () => "", projectMarkColor: () => "" });
+    await settle();
+    const icon = h.document.querySelector(".gfp-title-icon") as HTMLElement;
+    expect(icon.classList.contains("gfp-title-icon-mark")).toBe(false);
+    expect(icon.dataset.repoColor).toBeUndefined();
+    expect(icon.innerHTML.length).toBeGreaterThan(0);
+    h.panel.destroy();
+    h.window.happyDOM.abort();
+  });
+
+  it("keeps its own folder when nothing published a mark at all", async () => {
+    // A chat.js too old to publish the bridge, and the settings mount, which
+    // passes no ui hooks. Neither may throw, and neither may render an empty box.
+    const h = mount({});
+    await settle();
+    const icon = h.document.querySelector(".gfp-title-icon") as HTMLElement;
+    expect(icon.classList.contains("gfp-title-icon-mark")).toBe(false);
+    expect(icon.innerHTML.length).toBeGreaterThan(0);
+    h.panel.destroy();
+    h.window.happyDOM.abort();
+  });
+});

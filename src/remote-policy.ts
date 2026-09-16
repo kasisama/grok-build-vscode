@@ -209,6 +209,9 @@ export const INBOUND_DISPOSITION: Record<WebviewMsg["type"], InboundDisposition>
   // as archive/pin: rearranges the remote's rail and touches nothing on disk
   // beyond that note.
   setRepoColor: "full",
+  // Same class again: the project's mark is a globalState note that rearranges
+  // the remote's own rail. Nothing here reaches the workspace.
+  setRepoIcon: "full",
   // Writes host state (globalState), same as the repo pin — classified with it
   // rather than as a view op, even though nothing is destroyed.
   toggleSessionPin: "full",
@@ -563,6 +566,7 @@ export const REMOTE_REQUIRES_BOUND_SESSION: Record<WebviewMsg["type"], boolean> 
   toggleRepoPin: false,
   setRepoArchived: false,
   setRepoColor: false,
+  setRepoIcon: false,
   toggleSessionPin: false,
   dismissWelcomeTip: false,
   welcomeTipShown: false,
@@ -772,6 +776,7 @@ export function allowRemoteRepoTarget(msg: WebviewMsg, isKnownCwd: (cwd: string)
     case "toggleRepoPin":
     case "setRepoArchived":
     case "setRepoColor":
+    case "setRepoIcon":
     case "clearAllSessions":
     case "listRepoSessions":
     // File browse names a cwd. Without this case the default branch returns

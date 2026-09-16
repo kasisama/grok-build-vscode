@@ -1778,34 +1778,38 @@ describe("projects rail", () => {
       expect(less.textContent).not.toMatch(/\d/);
     });
 
-    it("project rows use folder-closed when collapsed and folder-open when expanded", () => {
+    /**
+     * The chevron says open or closed; the mark says which project. The folder
+     * used to do both, and that is exactly why nothing else could replace it —
+     * a rocket has no open variant.
+     */
+    it("folds on a chevron and leaves the project mark alone", () => {
       const { doc, window } = boot("/work/alpha");
       dispatch(window, sessionsFrame([row("a1", "/work/alpha", "alpha one", 9)]));
       const alpha = () => doc.querySelectorAll(".rail-repo")[repoNames(doc).indexOf("alpha")];
       const twisty = () => alpha().querySelector(".rail-twisty") as HTMLElement;
-      // Expanded: ONE flag drives icon + session list (data-expanded + folder-open).
+      const chevron = () => alpha().querySelector(".rail-chevron") as HTMLElement;
+      const markPath = () => twisty().querySelector("path")?.getAttribute("d");
+      const chevPath = () => chevron().querySelector("path")?.getAttribute("d");
       expect(alpha().getAttribute("data-expanded")).toBe("1");
-      // Shared 24px outline marks are distinguished by their lucide paths.
-      expect(twisty().querySelector("svg")?.getAttribute("fill")).toBe("none");
-      expect(twisty().querySelector("svg")?.getAttribute("stroke")).toBe("currentColor");
-      expect(twisty().innerHTML).toMatch(/m6 14 1\.5-2\.9/);
-      expect(twisty().innerHTML).not.toMatch(/M20 20a2 2/);
+      // Filled Material Symbols on their own grid, not the old 24px outline.
+      expect(twisty().querySelector("svg")?.getAttribute("fill")).toBe("currentColor");
+      expect(twisty().querySelector("svg")?.getAttribute("viewBox")).toBe("0 -960 960 960");
       expect(alpha().querySelector(".rail-sessions")).not.toBe(null);
-      // Icon and list cannot disagree: sessions present ⇒ open icon path.
-      expect(!!alpha().querySelector(".rail-sessions")).toBe(
-        /m6 14 1\.5-2\.9/.test(twisty().innerHTML),
-      );
-      // Folder is an indicator (not a button); the whole head toggles.
+      // The chevron precedes the mark: disclosure first, identity second.
+      const kids = [...alpha().querySelector(".rail-repo-head")!.children].map((e) => e.className);
+      expect(kids.indexOf("rail-chevron")).toBeLessThan(kids.indexOf("rail-twisty"));
+      // Both are indicators, not buttons; the whole head toggles.
       expect(twisty().tagName).toBe("SPAN");
+      expect(chevron().tagName).toBe("SPAN");
+      const openMark = markPath();
+      const openChev = chevPath();
       click(window, alpha().querySelector(".rail-repo-head") as HTMLElement);
-      // Collapsed: the closed mark, no sessions, data-expanded=0.
       expect(alpha().getAttribute("data-expanded")).toBe("0");
-      expect(twisty().innerHTML).toMatch(/M20 20a2 2/);
-      expect(twisty().innerHTML).not.toMatch(/m6 14 1\.5-2\.9/);
       expect(alpha().querySelector(".rail-sessions")).toBe(null);
-      expect(!!alpha().querySelector(".rail-sessions")).toBe(
-        /m6 14 1\.5-2\.9/.test(twisty().innerHTML),
-      );
+      // Only the chevron answers the fold. The mark is the project's identity.
+      expect(chevPath()).not.toBe(openChev);
+      expect(markPath()).toBe(openMark);
     });
 
     it("the whole project header toggles expand; hover actions do not", () => {

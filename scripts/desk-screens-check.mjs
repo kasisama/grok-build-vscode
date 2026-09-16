@@ -223,6 +223,39 @@ try {
     await page.screenshot({ path: path.join(OUT, `${name}.png`) });
     log(`captured ${name}.png`);
   };
+  /**
+   * The project's mark, above its files as well as beside its name.
+   *
+   * Desktop-only wiring, and the only place it can be checked: the docked tree
+   * is mounted by src/desktop/file-tree-panel.ts, in the SAME document as
+   * chat.js but from a different module, so it reaches the mark through the
+   * `window.__grokProjectMark` bridge rather than by calling it. The relay's
+   * screens gate exercises chat.js's own panel and never touches this path.
+   *
+   * Compares the path DATA: innerHTML re-serialises `<path/>` as
+   * `<path></path>`, so equal markup is not what "the same mark" means here.
+   * The fixture project has chosen no mark, which is the case worth pinning
+   * anyway - the bridge has to carry the DEFAULT through too, or a project with
+   * no icon wears a folder on the rail and a file-type icon over its files.
+   */
+  const assertProjectMark = async () => {
+    const seen = await page.evaluate(() => {
+      const d = (el) => (el?.querySelector("path")?.getAttribute("d") || "").trim();
+      const twisty = document.querySelector(".rail-repo .rail-twisty");
+      const title = document.querySelector(".gfp-title-icon");
+      return {
+        rail: twisty ? d(twisty) : null,
+        title: title ? d(title) : null,
+        titleIsMark: !!title && title.classList.contains("gfp-title-icon-mark"),
+        bridge: typeof window.__grokProjectMark === "function",
+      };
+    });
+    assert.ok(seen.bridge, "desk: chat.js never published __grokProjectMark, so the docked tree cannot draw the project mark");
+    assert.ok(seen.rail && seen.rail.length > 10, `desk: the rail drew no project mark - ${JSON.stringify(seen)}`);
+    assert.ok(seen.titleIsMark, `desk: the docked tree's title fell back to a file-type icon - ${JSON.stringify(seen)}`);
+    assert.equal(seen.title, seen.rail, `desk: the tree title and the rail draw different marks - ${JSON.stringify(seen)}`);
+    log("desk: one project mark on the rail and above its files");
+  };
   const assertNoBlankIcons = async (where) => {
     const blank = await page.evaluate(`(${BLANK_ICONS})()`);
     assert.deepEqual(blank, [], `${where}: icons rendered with no size — ${JSON.stringify(blank)}`);
@@ -548,6 +581,7 @@ try {
   await shot("desk-2-tree");
   await assertNoBlankIcons("desk tree");
   await assertBarIcons("desk tree");
+  await assertProjectMark();
 
   await page.locator(".gfp-row", { hasText: "README.md" }).first().click();
   await page.waitForSelector(".gfp-viewer:not([hidden])", { timeout: 25000 });

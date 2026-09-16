@@ -18,11 +18,15 @@
       const [field, target] = fields[message.type];
       return { key: field, field, value: message.value, target };
     }
-    if (message.type === "setRepoColor" || message.type === "setRepoArchived") {
-      const field = message.type === "setRepoColor" ? "color" : "archived";
+    if (message.type === "setRepoColor" || message.type === "setRepoArchived" || message.type === "setRepoIcon") {
+      const field = message.type === "setRepoColor" ? "color"
+        : message.type === "setRepoIcon" ? "icon"
+        : "archived";
       const target = field === "archived"
         ? message.cwd + " to " + (message.archived ? "Archived" : "Projects")
-        : "the colour of " + message.cwd + " to " + (message.color || "none");
+        : field === "icon"
+          ? "the icon of " + message.cwd + " to " + (message.icon || "the default folder")
+          : "the colour of " + message.cwd + " to " + (message.color || "none");
       return { key: field + ":" + message.cwd, field, value: message[field], target };
     }
     if (message.type === "setRoutinePaused") {
@@ -1066,6 +1070,10 @@
     folderOpen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>`,
     // Palette glyph for "Set color" — stroke-only so it inherits menu icon tint.
     palette: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="0.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="0.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="0.5" fill="currentColor"/><circle cx="6.5" cy="12.5" r="0.5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>`,
+    // Lucide shapes — the "Set icon" menu glyph. Stroke-only like its palette
+    // neighbour, so the pair reads as one row of menu chrome rather than one
+    // outline and one filled mark arguing about weight.
+    shapes: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></svg>`,
     pin: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="m5 17 2-7V5l-2-2h14l-2 2v5l2 7Z"/></svg>`,
     // Same Lucide pin path with a filled head (outline stroke kept for the needle).
     pinFilled: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="m5 17 2-7V5l-2-2h14l-2 2v5l2 7Z" fill="currentColor"/></svg>`,
@@ -3492,6 +3500,12 @@
   window.__grokFilePanelConfirm = uiChoice;
   window.__grokFilePanelAskAgent = appendComposerText;
   window.__grokFilePanelOpenSettings = () => openSettingsCategory("providers");
+  // The desktop's docked file tree is injected into THIS document by
+  // src/desktop/file-tree-panel.ts, which builds its own `ui` object and so
+  // cannot reach these directly. Published for it, the same way renderMarkdown
+  // and the settings opener already are.
+  window.__grokProjectMark = (cwd) => repoMarkForCwd(cwd);
+  window.__grokProjectMarkColor = (cwd) => repoColorForCwd(cwd);
 
   /** uiConfirm with a single text field. Resolves to the string, or null on
    *  cancel — an empty string is a real answer the caller may want to reject on
@@ -4921,6 +4935,11 @@
   const pendingRepoColor = createPendingOverlay({
     onExpire() { renderRail(); },
   });
+  const pendingRepoIcon = createPendingOverlay({
+    // The mark also rides the top bar and the file panel's title, so a settled
+    // or expired paint has to reach more than the rail.
+    onExpire() { paintRepoSurfaces(); },
+  });
   const pendingPins = new Map();
   let pinSequence = 0;
   let pinRequests = false;
@@ -4982,6 +5001,69 @@
     return typeof repo?.color === "string" ? repo.color : "";
   }
 
+  function repoIconOf(repo) {
+    const painted = pendingRepoIcon.valueFor(cwdKey(repo && repo.cwd));
+    if (painted !== undefined) return painted;
+    return typeof repo?.icon === "string" ? repo.icon : "";
+  }
+
+  /**
+   * Markup for a project's mark. The default — and the fallback for an id this
+   * build does not ship — is the filled folder, NOT the open/closed pair: the
+   * chevron beside it is what says open or closed now, so the mark is free to
+   * be an identity rather than a disclosure control. That separation is what
+   * makes any of the other 95 usable.
+   */
+  function repoMarkHTML(repo) {
+    const marks = typeof globalThis !== "undefined" ? globalThis.GrokRepoIcons : null;
+    if (!marks) return ICON.folderClosed;
+    return marks.svg(repoIconOf(repo)) || marks.svg("folder_open");
+  }
+
+  /** Mark for a cwd rather than a catalog row — what the file panel's title and
+   *  any other cwd-addressed surface needs. "" only when the project is UNKNOWN
+   *  (a config directory, say), so callers keep their own folder glyph there.
+   *  A known project that has chosen nothing still gets the default mark: it is
+   *  the one the rail is drawing beside its name, and a title that fell back to
+   *  its own folder glyph instead would put two different folders on screen. */
+  function repoMarkForCwd(cwd) {
+    if (!cwd) return "";
+    const hit = state.repos.find((r) => sameCwd(r.cwd, cwd));
+    if (!hit) return "";
+    return repoMarkHTML(hit);
+  }
+
+  /** Tint for a cwd, for the same cwd-addressed surfaces as repoMarkForCwd. */
+  function repoColorForCwd(cwd) {
+    if (!cwd) return "";
+    const hit = state.repos.find((r) => sameCwd(r.cwd, cwd));
+    return hit ? repoColorOf(hit) : "";
+  }
+
+  /** Every surface that draws a project's mark or tint. The rail is the loud
+   *  one, but the top-bar chip and the file panel's title carry it too, and a
+   *  paint that reached only the rail would leave them disagreeing. */
+  function paintRepoSurfaces() {
+    renderRail();
+    renderRepoChip();
+    if (repoPopover && !repoPopover.hidden) renderRepoPopover();
+    repaintFilePanelTitle();
+  }
+
+  /** Ask a mounted file panel to redraw its title. The panel owns that element;
+   *  this only tells it the answer changed. No panel, or an older shared build
+   *  without the hook, is a no-op — the title keeps its folder. */
+  function repaintFilePanelTitle() {
+    const panel = state.filesBrowse && state.filesBrowse.component;
+    if (panel && typeof panel.repaintTitle === "function") {
+      try { panel.repaintTitle(); } catch (_) { /* unmounted mid-paint */ }
+    }
+    const deskPanel = typeof window !== "undefined" ? window.__grokDeskFilePanel : null;
+    if (deskPanel && typeof deskPanel.repaintTitle === "function") {
+      try { deskPanel.repaintTitle(); } catch (_) { /* unmounted mid-paint */ }
+    }
+  }
+
   function sessionRowName(s) {
     const painted = s && pendingRename.valueFor(s.id);
     if (painted !== undefined) return painted || "Untitled";
@@ -4997,7 +5079,12 @@
 
   function paintPendingRepoColor(cwd, color) {
     pendingRepoColor.paint(cwdKey(cwd), color);
-    renderRail();
+    paintRepoSurfaces();
+  }
+
+  function paintPendingRepoIcon(cwd, icon) {
+    pendingRepoIcon.paint(cwdKey(cwd), icon);
+    paintRepoSurfaces();
   }
 
   function paintPendingRename(id, name) {
@@ -5007,7 +5094,9 @@
   }
 
   function settlePendingRepoColor(entries) {
-    pendingRepoColor.settleAny((entries || []).map((r) => r && cwdKey(r.cwd)).filter(Boolean));
+    const keys = (entries || []).map((r) => r && cwdKey(r.cwd)).filter(Boolean);
+    pendingRepoColor.settleAny(keys);
+    pendingRepoIcon.settleAny(keys);
   }
 
   function settlePendingRename(entries) {
@@ -5077,9 +5166,17 @@
     repoBtn.classList.toggle("disabled", locked);
     repoBtn.setAttribute("aria-disabled", String(locked));
     repoBtn.classList.toggle("browsing", browsing);
+    // A worktree keeps the branch glyph — it says something the mark cannot,
+    // and a worktree is not the project you picked an icon for.
+    const chipMark = selected?.worktreeLabel
+      ? ICON.gitBranch
+      : (selected ? repoMarkHTML(selected) : ICON.folder);
     repoBtn.innerHTML =
-      `<span class="repo-chip-icon">${selected?.worktreeLabel ? ICON.gitBranch : ICON.folder}</span>` +
+      `<span class="repo-chip-icon">${chipMark}</span>` +
       `<span class="repo-chip-label"></span>${ICON.chevronDown}`;
+    const chipColor = selected ? repoColorOf(selected) : "";
+    if (chipColor && !selected?.worktreeLabel) repoBtn.dataset.repoColor = chipColor;
+    else delete repoBtn.dataset.repoColor;
     repoBtn.querySelector(".repo-chip-label").textContent = label;
     repoBtn.title = locked
       ? "Loading conversation... repository switching is disabled until it finishes."
@@ -5110,7 +5207,10 @@
       main.type = "button";
       main.className = "repo-row-main";
       main.disabled = !repo.available || repoSwitcherLocked();
-      main.innerHTML = `<span class="repo-row-icon">${repo.worktreeLabel ? ICON.gitBranch : ICON.folder}</span><span class="repo-row-copy"><span class="repo-row-name"></span><span class="repo-row-meta"></span></span>`;
+      main.innerHTML = `<span class="repo-row-icon">${repo.worktreeLabel ? ICON.gitBranch : repoMarkHTML(repo)}</span><span class="repo-row-copy"><span class="repo-row-name"></span><span class="repo-row-meta"></span></span>`;
+      const rowColor = repo.worktreeLabel ? "" : repoColorOf(repo);
+      const rowIcon = main.querySelector(".repo-row-icon");
+      if (rowColor) rowIcon.dataset.repoColor = rowColor;
       main.querySelector(".repo-row-name").textContent = repo.label || cwdLeaf(repo.cwd);
       const meta = main.querySelector(".repo-row-meta");
       meta.textContent = repo.available
@@ -5624,6 +5724,7 @@
   // leave a stranded picker after a rail rebuild.
   let railColorPickerEl = null;
   let railColorPickerAnchorEl = null;
+  let railIconPickerEl = null;
 
   /** Palette the host accepts — keep ids in lockstep with REPO_COLOR_IDS in
    *  sessions.ts. Labels are accessible names for each swatch. */
@@ -5642,10 +5743,15 @@
     if (railColorPickerEl) { railColorPickerEl.remove(); railColorPickerEl = null; }
   }
 
+  function closeRailIconPicker() {
+    if (railIconPickerEl) { railIconPickerEl.remove(); railIconPickerEl = null; }
+  }
+
   function closeRailMenu() {
     railMenuAnchorEl = null;
     if (railMenuEl) { railMenuEl.remove(); railMenuEl = null; }
     closeRailColorPicker();
+    closeRailIconPicker();
   }
 
   /** Position a fixed popover under/above an anchor (shared by menu + colour
@@ -5770,6 +5876,41 @@
     if (focusBtn) focusBtn.focus();
   }
 
+  /**
+   * Ninety-five marks plus the default folder, in six tabs with a search box.
+   * Host-persisted via setRepoIcon; capability-gated by railIconSupported. The
+   * grid itself is media/repo-icon-picker.js, shared with the VS Code rail so
+   * both surfaces offer the same marks in the same order.
+   */
+  function openRepoIconPicker(anchor, repo) {
+    closeRailIconPicker();
+    if (!anchor || !repo) return;
+    const builder = typeof globalThis !== "undefined" ? globalThis.GrokRepoIconPicker : null;
+    if (!builder) return;
+    const picker = builder.create({
+      currentIcon: repoIconOf(repo),
+      onClose() { closeRailIconPicker(); },
+      onPick(id) {
+        closeRailIconPicker();
+        // On a remote postPreference owns the send: it holds the setter through
+        // a dropped socket and reports the outcome, and the `repos` frame it
+        // watches for carries `icon`, so it settles with no extra wiring. Off
+        // remote it returns false and we post + paint, exactly as the colour
+        // beside it does.
+        if (postPreference({ type: "setRepoIcon", cwd: repo.cwd, icon: id })) return;
+        vscode.postMessage({ type: "setRepoIcon", cwd: repo.cwd, icon: id });
+        // Paint now. The next `repos` frame that names this cwd is the
+        // authority — confirm, contradict, or a silent host's expiry.
+        paintPendingRepoIcon(repo.cwd, id);
+      },
+    });
+    if (!picker) return;
+    document.body.appendChild(picker.el);
+    railIconPickerEl = picker.el;
+    placeRailPopover(picker.el, anchor);
+    picker.focus();
+  }
+
   /** items: [{ label, icon, danger, disabled, onSelect }] — a `null` entry is a
    *  separator, which is how the destructive tail is kept away from the thumb.
    *
@@ -5844,6 +5985,13 @@
   // Rail menus are fixed-position under <body>; close on outside click / Esc /
   // resize regardless of remote vs desktop once a rail mount exists (or may).
   document.addEventListener("click", (e) => {
+    if (railIconPickerEl) {
+      if (railIconPickerEl.contains(e.target)) return;
+      closeRailIconPicker();
+      // Same reasoning as the colour picker below: the two are never open
+      // together, so fall through only when no menu is up.
+      if (!railMenuEl) return;
+    }
     if (railColorPickerEl) {
       if (railColorPickerEl.contains(e.target)) return;
       if (railColorPickerAnchorEl && railColorPickerAnchorEl.contains(e.target)) return;
@@ -5863,6 +6011,7 @@
   }, true);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (railIconPickerEl) { closeRailIconPicker(); return; }
       if (railColorPickerEl) { closeRailColorPicker(); return; }
       closeRailMenu();
     }
@@ -6491,6 +6640,13 @@
     return state.repos.some((r) => typeof r.color === "string");
   }
 
+  /** Same capability rule for marks — and the glyph data has to be on the page
+   *  too, since a picker with no paths would offer 95 empty squares. */
+  function railIconSupported() {
+    const marks = typeof globalThis !== "undefined" ? globalThis.GrokRepoIcons : null;
+    return !!marks && state.repos.some((r) => typeof r.icon === "string");
+  }
+
   /** Rows we can draw conclusions FROM, as opposed to rows we merely have none
    *  of yet. The selected project's holder starts empty and stays empty until
    *  its first list arrives, so an empty one proves nothing about the project —
@@ -6886,6 +7042,7 @@
     // anchor button, and re-opening it mid-catalog-refresh is not worth the
     // bookkeeping. Closing avoids a fixed popover stranded over a gone row.
     if (railColorPickerEl) closeRailColorPicker();
+    if (railIconPickerEl) closeRailIconPicker();
     railHoldHoverAfterRebuild();
     // Let the browser paint this rebuild with transitions off, then restore them
     // so an ordinary hover still fades. rAF (not a timer) so it lands after the
@@ -7846,12 +8003,22 @@
       (expanded ? "Collapse " : "Expand ") + (repo.label || cwdLeaf(repo.cwd)),
     );
 
-    // Folder open/closed indicator — same `expanded` flag as the session list.
-    // Colour tints the stroke via currentColor (`data-repo-color` → CSS vars);
+    // Disclosure first, identity second. The folder used to be both — open when
+    // expanded, closed when not — which is exactly why no other glyph could
+    // replace it: a rocket has no open variant. Splitting them frees the mark to
+    // say WHICH project while the chevron says open or closed, and the chevron
+    // states it without being pointed at, which dimming does not.
+    const chev = document.createElement("span");
+    chev.className = "rail-chevron";
+    chev.innerHTML = expanded ? ICON.chevronDown : ICON.chevronRight;
+    chev.setAttribute("aria-hidden", "true");
+    head.appendChild(chev);
+
+    // Colour tints the mark via currentColor (`data-repo-color` → CSS vars);
     // none/absent leaves the default descriptionForeground.
     const twisty = document.createElement("span");
     twisty.className = "rail-twisty";
-    twisty.innerHTML = expanded ? ICON.folderOpen : ICON.folderClosed;
+    twisty.innerHTML = repoMarkHTML(repo);
     twisty.setAttribute("aria-hidden", "true");
     const repoColor = repoColorOf(repo);
     if (repoColor) twisty.dataset.repoColor = repoColor;
@@ -7991,9 +8158,18 @@
       ...(railColorSupported() ? [{
         label: "Set color",
         icon: ICON.palette,
-        title: "Tint this project's folder icon so it is easy to find",
+        title: "Tint this project's icon so it is easy to find",
         onSelect: () => openRepoColorPicker(projectMenuBtn, repo),
-      }, null] : []),
+      }] : []),
+      // Under the colour, because they answer the same question in the same
+      // place: how do I recognise this project at a glance.
+      ...(railIconSupported() ? [{
+        label: "Set icon",
+        icon: ICON.shapes,
+        title: "Give this project its own icon instead of a folder",
+        onSelect: () => openRepoIconPicker(projectMenuBtn, repo),
+      }] : []),
+      ...(railColorSupported() || railIconSupported() ? [null] : []),
       // Hide closes a local folder; archiving only changes its rail group.
       ...(canRemoveProjectFolder() ? [{
         label: "Hide project",
@@ -20039,6 +20215,13 @@
           fileIcons: { baseUrl: iconBase },
           askAgent: appendComposerText,
           openSettings: window.__grokFilePanelOpenSettings,
+          // The folder above the files is the SAME project, so it wears the
+          // same mark as the rail row — that was the point of asking for one
+          // ("we use the same icon over files and folders"). Supplied per
+          // mount, not globally: the provider-config panel's scope is a config
+          // directory, not a project, and must keep its folder.
+          projectMark: repoMarkForCwd,
+          projectMarkColor: repoColorForCwd,
         },
         // No purpose gate here on purpose. People clone repositories in
         // Knowledge work too, and `changesAvailable()` already answers the real

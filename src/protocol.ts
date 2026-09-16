@@ -1281,6 +1281,12 @@ export type WebviewMsg =
   // so the choice follows the user to a phone rather than living in browser
   // localStorage. Purely a rail affordance; the VS Code repo picker ignores it.
   | { type: "setRepoColor"; cwd: string; color: string }
+  // Project mark for the conversation rail. `icon` is one of the host's mark
+  // ids (media/repo-icons.js / src/repo-icon-ids.ts), or "" for the default
+  // folder. Same capability pattern, persistence and reach as setRepoColor —
+  // a NEW message type rather than a new field on that one, so an older host
+  // drops it instead of half-handling it.
+  | { type: "setRepoIcon"; cwd: string; icon: string }
   // cwd is required to reopen a worktree-isolated session (sessions are keyed
   // by cwd on disk). Omitted → host resolves from meta / workspace root.
   //
@@ -1504,7 +1510,7 @@ const WEBVIEW_MESSAGE_TYPE_MAP: Record<WebviewMsg["type"], true> = {
   cancelDeviceLogin: true, submitDeviceLoginCode: true,
   logout: true, checkGrokUpdate: true, updateGrok: true, updateCodex: true, updateClaude: true, recheckConnection: true, refreshProviders: true, retryProviderSession: true,
   listSessions: true, listRepoSessions: true, selectRepo: true, toggleRepoPin: true, toggleSessionPin: true,
-  setRepoArchived: true, setRepoColor: true,
+  setRepoArchived: true, setRepoColor: true, setRepoIcon: true,
   resumeSession: true, renameSession: true, deleteSession: true,
   clearAllSessions: true, pickFile: true, mentionQuery: true, addMentionFile: true,
   listProjectDir: true, readProjectFile: true, writeProjectFile: true,

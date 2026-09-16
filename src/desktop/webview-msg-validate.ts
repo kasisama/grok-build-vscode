@@ -333,6 +333,9 @@ export function parseWebviewMsg(raw: unknown): WebviewMsg | null {
     case "setRepoColor":
       if (!isString(raw.cwd) || !isString(raw.color)) return null;
       break;
+    case "setRepoIcon":
+      if (!isString(raw.cwd) || !isString(raw.icon)) return null;
+      break;
     case "resumeSession":
       if (!isString(raw.id)) return null;
       if (!opt(raw.cwd, isString)) return null;

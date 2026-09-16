@@ -9,6 +9,11 @@ import { fileURLToPath } from "node:url";
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const railSrc = read("../media/projects-rail.js");
+// The rail webview loads these before projects-rail.js (see sidebar.ts). Eval
+// them here too, or every test would exercise the no-marks fallback path
+// instead of what ships.
+const marksSrc = read("../media/repo-icons.js");
+const pickerSrc = read("../media/repo-icon-picker.js");
 
 interface Posted {
   type: string;
@@ -38,6 +43,8 @@ function bootRail() {
       <div id="rail-scroll" class="rail-scroll"></div>
     </aside>
   `;
+  window.eval(marksSrc);
+  window.eval(pickerSrc);
   window.eval(railSrc);
   return { window, doc, posted };
 }
@@ -101,7 +108,13 @@ function loadSessions(
   });
 }
 
-it("uses open and closed outline project marks that inherit their tint", () => {
+/**
+ * The contract that makes 95 icons possible: the CHEVRON is the disclosure and
+ * the MARK is the identity. Before this the folder was both — open when
+ * expanded, closed when not — which is precisely why no other glyph could take
+ * its place, since a rocket has no open variant.
+ */
+it("separates the disclosure chevron from the project mark", () => {
   const { window, doc } = bootRail();
   const api = railApi(window);
   loadCatalog(api);
@@ -110,13 +123,69 @@ it("uses open and closed outline project marks that inherit their tint", () => {
     (el) => el.querySelector(".rail-repo-label")?.textContent === "alpha",
   )!;
   const mark = () => alpha().querySelector(".rail-twisty svg")!;
-  expect(mark().getAttribute("viewBox")).toBe("0 0 24 24");
-  expect(mark().getAttribute("fill")).toBe("none");
-  expect(mark().getAttribute("stroke")).toBe("currentColor");
-  expect(mark().querySelector("path")?.getAttribute("d")).toMatch(/^m6 14 1\.5-2\.9/);
+  const chevron = () => alpha().querySelector(".rail-chevron svg")!;
+  // Filled Material Symbols on their own grid, not the old 24px outline: the
+  // fill is what carries enough colour to tell six projects apart.
+  expect(mark().getAttribute("viewBox")).toBe("0 -960 960 960");
+  expect(mark().getAttribute("fill")).toBe("currentColor");
+  const expanded = mark().querySelector("path")?.getAttribute("d");
+  // The chevron precedes the mark, and only the chevron changes with the fold.
+  const kids = [...alpha().querySelector(".rail-repo-head")!.children].map((e) => e.className);
+  expect(kids.indexOf("rail-chevron")).toBeLessThan(kids.indexOf("rail-twisty"));
+  const down = chevron().querySelector("path")?.getAttribute("d");
   (alpha().querySelector(".rail-repo-head") as HTMLElement).click();
-  expect(mark().querySelector("path")?.getAttribute("d")).toMatch(/^M20 20a2 2/);
   expect(alpha().querySelector(".rail-sessions")).toBeNull();
+  expect(mark().querySelector("path")?.getAttribute("d")).toBe(expanded);
+  expect(chevron().querySelector("path")?.getAttribute("d")).not.toBe(down);
+  window.happyDOM.abort();
+});
+
+it("draws the project's chosen mark, and falls back to the folder for an id it cannot draw", () => {
+  const { window, doc } = bootRail();
+  const api = railApi(window);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const marks = (window as any).GrokRepoIcons;
+  api.onMessage({
+    type: "repos",
+    entries: [
+      { cwd: "/work/alpha", label: "alpha", available: true, updatedAt: 30, icon: "rocket" },
+      { cwd: "/work/beta", label: "beta", available: true, updatedAt: 20, icon: "" },
+      // A newer client's id, or one dropped from the curated set. Never an
+      // empty box.
+      { cwd: "/work/gamma", label: "gamma", available: true, updatedAt: 10, icon: "no_such_mark" },
+    ],
+    cwd: "/work/alpha",
+  });
+  const markOf = (label: string) => [...doc.querySelectorAll(".rail-repo")]
+    .find((el) => el.querySelector(".rail-repo-label")?.textContent === label)!
+    .querySelector(".rail-twisty path")!.getAttribute("d");
+  const pathOf = (id: string) => /\sd="([^"]+)"/.exec(marks.svg(id))![1];
+  expect(markOf("alpha")).toBe(pathOf("rocket"));
+  expect(markOf("beta")).toBe(pathOf(marks.DEFAULT_ID));
+  expect(markOf("gamma")).toBe(pathOf(marks.DEFAULT_ID));
+  window.happyDOM.abort();
+});
+
+it("offers Set icon under Set color, and posts the chosen id", () => {
+  const { window, doc, posted } = bootRail();
+  const api = railApi(window);
+  api.onMessage({
+    type: "repos",
+    entries: [{ cwd: "/work/alpha", label: "alpha", available: true, updatedAt: 30, color: "", icon: "" }],
+    cwd: "/work/alpha",
+  });
+  const head = doc.querySelector(".rail-repo-head") as HTMLElement;
+  (head.querySelector(".rail-menu-btn, .rail-action-btn:last-child") as HTMLElement).click();
+  const labels = [...doc.querySelectorAll(".rail-menu-item")].map((e) => (e.textContent || "").trim());
+  expect(labels.indexOf("Set icon")).toBe(labels.indexOf("Set color") + 1);
+  (([...doc.querySelectorAll(".rail-menu-item")]
+    .find((e) => (e.textContent || "").trim() === "Set icon")) as HTMLElement).click();
+  const cell = doc.querySelector('.repo-icon-cell[data-icon="rocket"]') as HTMLElement;
+  expect(cell).toBeTruthy();
+  cell.click();
+  expect(posted.filter((m) => m.type === "setRepoIcon")).toEqual([
+    { type: "setRepoIcon", cwd: "/work/alpha", icon: "rocket" },
+  ]);
   window.happyDOM.abort();
 });
 

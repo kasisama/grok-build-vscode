@@ -1104,7 +1104,21 @@
       title.textContent = "";
       const icon = doc.createElement("span");
       icon.className = "gfp-title-icon";
-      renderFileIcon(icon, label, "dir");
+      // The project's own mark when the mount can name one, so the folder above
+      // the files and the project's row in the rail are the same glyph in the
+      // same colour. A mount that supplies no hook — the provider-config panel,
+      // whose scope is a config directory rather than a project — keeps the
+      // folder, and so does a project with no mark of its own.
+      const cwd = scopeCwd(currentScope);
+      const mark = typeof ui.projectMark === "function" && cwd ? ui.projectMark(cwd) : "";
+      if (mark) {
+        icon.innerHTML = mark;
+        icon.classList.add("gfp-title-icon-mark");
+        const tint = typeof ui.projectMarkColor === "function" ? ui.projectMarkColor(cwd) : "";
+        if (tint) icon.dataset.repoColor = tint;
+      } else {
+        renderFileIcon(icon, label, "dir");
+      }
       const name = doc.createElement("span");
       name.className = "gfp-title-label";
       name.textContent = label;
@@ -4022,6 +4036,14 @@
       isOpen: () => open,
       isOverlay: () => rootEl.classList.contains("gfp-overlay"),
       setScope,
+      /** Redraw the title. The host calls this when the project's mark or tint
+       *  changed underneath us — the scope did not, so setScope would be a
+       *  full reload for a one-glyph change. */
+      repaintTitle() {
+        if (destroyed) return;
+        paintTitle();
+        applyStripShrink();
+      },
       /**
        * A connection ended and a new one is up. The caller is the only thing
        * that can know that, which is the whole reason this is a call and not

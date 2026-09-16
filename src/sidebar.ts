@@ -335,6 +335,7 @@ import {
   SessionMetaOverrides,
   RepoArchives,
   RepoColors,
+  RepoIcons,
   RepoListEntry,
   RepoPins,
   capAutoName,
@@ -353,7 +354,9 @@ import {
   isEmptySession,
   isPathInside,
   isRepoColor,
+  isRepoIcon,
   REPO_COLOR_IDS,
+  REPO_ICON_IDS,
   mostRecentSession,
   neighbourAfterDelete,
   normalizeRepoPath,
@@ -508,6 +511,10 @@ const REPO_ARCHIVES_KEY = "grok.repoArchives";
  *  rail. Stored under ~/.grok/client-state so the choice follows you to a phone
  *  and survives a cleared browser — same home as pins/archives. */
 const REPO_COLORS_KEY = "grok.repoColors";
+/** Shared client-state key for per-project marks. Same home and same reasoning
+ *  as the colours above — the glyph you gave a project should be waiting for
+ *  you on the phone. */
+const REPO_ICONS_KEY = "grok.repoIcons";
 /**
  * Folders the user added to the rail by hand, on a host that cannot open them.
  *
@@ -6054,6 +6061,8 @@ Only continue if you trust this code.`,
       // AFK Pilot). Always passed so every row carries `color` (possibly "") —
       // field presence is the client capability probe.
       colors: this.state.get<RepoColors>(REPO_COLORS_KEY, {}),
+      // Marks ride with the colours, for the same reason and on the same terms.
+      icons: this.state.get<RepoIcons>(REPO_ICONS_KEY, {}),
       tmpDir: os.tmpdir(),
       // Open folders remain selectable before Grok creates a catalog row (and
       // bypass managed-worktree exclusion when the user opened a worktree).
@@ -6119,10 +6128,11 @@ Only continue if you trust this code.`,
             continue;
           }
           // Trusted open folder with no catalog row yet — still show it.
-          // Colour still comes from the shared store so a painted project
-          // keeps its tint when Grok has not created a sessions catalog yet.
+          // Colour and mark still come from the shared store so a painted
+          // project keeps them when Grok has not created a sessions catalog yet.
           const colors = this.state.get<RepoColors>(REPO_COLORS_KEY, {});
           const colorChoice = colors[key]?.color;
+          const iconChoice = this.state.get<RepoIcons>(REPO_ICONS_KEY, {})[key]?.icon;
           const archiveChoice = this.state.get<RepoArchives>(REPO_ARCHIVES_KEY, {})[key];
           entries.push({
             cwd,
@@ -6135,6 +6145,9 @@ Only continue if you trust this code.`,
             // Stored choices are non-empty ids; missing/invalid → "" for none.
             color: colorChoice && (REPO_COLOR_IDS as readonly string[]).includes(colorChoice)
               ? colorChoice
+              : "",
+            icon: iconChoice && (REPO_ICON_IDS as readonly string[]).includes(iconChoice)
+              ? iconChoice
               : "",
           });
         }
@@ -7740,6 +7753,24 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     if (color === "") delete next[key];
     else next[key] = { cwd: hit.cwd, color };
     await this.state.update(REPO_COLORS_KEY, next);
+    this.postRepoCatalog();
+  }
+
+  /** Record a project's mark (or clear it). Empty `icon` removes the stored
+   *  entry so the wire reports `""` again. Unknown ids are ignored rather than
+   *  stored: a newer client can name a mark this build has never shipped, and
+   *  persisting the string it was handed would hand every other surface an id
+   *  none of them can draw. */
+  private async setRepoIcon(cwd: string, icon: string): Promise<void> {
+    if (!isRepoIcon(icon)) return;
+    const hit = this.localRepoCatalogEntries().find((r) => pathsEqual(r.cwd, cwd));
+    if (!hit) return;
+    const icons = this.state.get<RepoIcons>(REPO_ICONS_KEY, {});
+    const key = normalizeRepoPath(hit.cwd);
+    const next: RepoIcons = { ...icons };
+    if (icon === "") delete next[key];
+    else next[key] = { cwd: hit.cwd, icon };
+    await this.state.update(REPO_ICONS_KEY, next);
     this.postRepoCatalog();
   }
 
@@ -11920,6 +11951,9 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
         break;
       case "setRepoColor":
         await this.setRepoColor(msg.cwd, msg.color);
+        break;
+      case "setRepoIcon":
+        await this.setRepoIcon(msg.cwd, msg.icon);
         break;
       case "toggleRepoPin":
         await this.toggleRepoPin(msg.cwd, msg.pinned);
@@ -17006,6 +17040,7 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     "clearAllSessions",
     "setRepoArchived",
     "setRepoColor",
+    "setRepoIcon",
     // Host-local by construction: it opens a native folder dialog. Reachable
     // from the rail because that is where the project list lives; a remote
     // cannot send it (remote-policy classifies it `host-local`).
@@ -20658,6 +20693,10 @@ ${many ? `${working.length} conversations are` : "A conversation is"} still work
     <div id="rail-scroll" class="rail-scroll"></div>
   </aside>
   <script nonce="${nonce}" src="${mediaUri("webview-helpers.js")}"></script>
+  <!-- Project marks. Data, then picker, then rail: each reads the previous
+       one's global at load time, and a missing one degrades to the folder. -->
+  <script nonce="${nonce}" src="${mediaUri("repo-icons.js")}"></script>
+  <script nonce="${nonce}" src="${mediaUri("repo-icon-picker.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("projects-rail.js")}"></script>
 </body>
 </html>`;
@@ -21069,6 +21108,10 @@ ${closeMain}
   <script nonce="${nonce}" src="${mediaUri("mathjax/tex-svg-full.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("mermaid/mermaid.min.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("webview-helpers.js")}"></script>
+  <!-- Project marks. Before the file panel AND before chat.js: both read these
+       globals at render time, and a missing one degrades to the folder. -->
+  <script nonce="${nonce}" src="${mediaUri("repo-icons.js")}"></script>
+  <script nonce="${nonce}" src="${mediaUri("repo-icon-picker.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("settings.js")}"></script>
   ${filePanelScript}
   <script nonce="${nonce}" src="${mediaUri("chat.js")}"></script>

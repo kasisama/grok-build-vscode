@@ -30,21 +30,37 @@
      nested corners visually concentric and matches the 8px icon buttons. */
   --chat-radius-message: 12px;
   --chat-radius-code: 8px;
-  /* Project folder colours (rail). No raw hex ÔÇö blue IS the theme link token;
-     the other five are fixed oklch hues mixed with --vscode-foreground so
-     contrast polarity follows the theme without a light/dark branch (same
-     reason as --chat-surface-user above: a pure token can vanish when themes
-     map surfaces onto each other). Swatch picker and folder stroke both read
-     these, so a seventh colour is one custom property + one palette id. */
-  --repo-color-blue: var(--vscode-textLink-foreground);
-  --repo-color-teal: color-mix(in oklab, oklch(0.68 0.12 200) 72%, var(--vscode-foreground) 28%);
-  --repo-color-green: color-mix(in oklab, oklch(0.68 0.15 145) 72%, var(--vscode-foreground) 28%);
-  --repo-color-amber: color-mix(in oklab, oklch(0.76 0.14 85) 72%, var(--vscode-foreground) 28%);
-  --repo-color-coral: color-mix(in oklab, oklch(0.68 0.15 30) 72%, var(--vscode-foreground) 28%);
-  --repo-color-purple: color-mix(in oklab, oklch(0.64 0.15 305) 72%, var(--vscode-foreground) 28%);
+  /* Project colours (rail). Six hues dealt out at even intervals around the
+     wheel, at full chroma, with a light-theme branch below.
+
+     They used to be mixed 28% into --vscode-foreground so one set of values
+     would serve both themes without a branch. That bought theme-proofing with
+     chroma and the bill came due: six hues compressed toward one grey, close
+     enough that people could not tell their projects apart — and blue was the
+     worst of it, because blue WAS the link token, about 20° from teal.
+
+     Same six names, so nothing anybody has already picked is thrown away. Mark
+     and swatch picker both read these, so a seventh colour is still one custom
+     property + one palette id. Keep in step with projects-rail.css. */
+  --repo-color-blue: oklch(0.70 0.16 250);
+  --repo-color-teal: oklch(0.75 0.13 195);
+  --repo-color-green: oklch(0.76 0.17 145);
+  --repo-color-amber: oklch(0.80 0.16 80);
+  --repo-color-coral: oklch(0.70 0.19 25);
+  --repo-color-purple: oklch(0.68 0.19 305);
 }
 
 body.vscode-light {
+  /* Darker and more saturated on a light ground — the same hue at the same
+     lightness washes out on white. Amber is the weakest of the twelve at about
+     3.8:1, which clears the 3:1 WCAG asks of a graphical object; it cannot go
+     much darker without turning olive. Keep in step with projects-rail.css. */
+  --repo-color-blue: oklch(0.55 0.17 250);
+  --repo-color-teal: oklch(0.56 0.12 195);
+  --repo-color-green: oklch(0.55 0.15 145);
+  --repo-color-amber: oklch(0.62 0.15 75);
+  --repo-color-coral: oklch(0.56 0.18 25);
+  --repo-color-purple: oklch(0.52 0.20 305);
   --e1: #1a8f7d;
   --e2: #1a85ff;
   --e3: #8250df;
@@ -589,14 +605,36 @@ body.rail-resizing * {
 }
 /* Folder is an open/closed indicator ÔÇö the whole head is the hit target. */
 .rail-twisty { cursor: inherit; pointer-events: none; }
-/* Stroke tint only (SVGs use currentColor). None / missing attr keeps the
-   descriptionForeground from .rail-twisty. */
-.rail-twisty[data-repo-color="blue"] { color: var(--repo-color-blue); }
-.rail-twisty[data-repo-color="teal"] { color: var(--repo-color-teal); }
-.rail-twisty[data-repo-color="green"] { color: var(--repo-color-green); }
-.rail-twisty[data-repo-color="amber"] { color: var(--repo-color-amber); }
-.rail-twisty[data-repo-color="coral"] { color: var(--repo-color-coral); }
-.rail-twisty[data-repo-color="purple"] { color: var(--repo-color-purple); }
+/* One hue, every surface that draws the project's mark: the rail, the
+   composer chip, the switcher rows and the file panel's title. The marks are
+   currentColor, so tinting the host is the whole mechanism. On the chip the
+   attribute sits on the BUTTON, so the rule has to reach the icon rather than
+   the button, or the project name beside it takes the hue too. A missing
+   attribute keeps each host's own descriptionForeground. */
+.rail-twisty[data-repo-color="blue"],
+.repo-chip[data-repo-color="blue"] .repo-chip-icon,
+.repo-row-icon[data-repo-color="blue"],
+.gfp-title-icon[data-repo-color="blue"] { color: var(--repo-color-blue); }
+.rail-twisty[data-repo-color="teal"],
+.repo-chip[data-repo-color="teal"] .repo-chip-icon,
+.repo-row-icon[data-repo-color="teal"],
+.gfp-title-icon[data-repo-color="teal"] { color: var(--repo-color-teal); }
+.rail-twisty[data-repo-color="green"],
+.repo-chip[data-repo-color="green"] .repo-chip-icon,
+.repo-row-icon[data-repo-color="green"],
+.gfp-title-icon[data-repo-color="green"] { color: var(--repo-color-green); }
+.rail-twisty[data-repo-color="amber"],
+.repo-chip[data-repo-color="amber"] .repo-chip-icon,
+.repo-row-icon[data-repo-color="amber"],
+.gfp-title-icon[data-repo-color="amber"] { color: var(--repo-color-amber); }
+.rail-twisty[data-repo-color="coral"],
+.repo-chip[data-repo-color="coral"] .repo-chip-icon,
+.repo-row-icon[data-repo-color="coral"],
+.gfp-title-icon[data-repo-color="coral"] { color: var(--repo-color-coral); }
+.rail-twisty[data-repo-color="purple"],
+.repo-chip[data-repo-color="purple"] .repo-chip-icon,
+.repo-row-icon[data-repo-color="purple"],
+.gfp-title-icon[data-repo-color="purple"] { color: var(--repo-color-purple); }
 .rail-action-btn { cursor: pointer; }
 /* Hover controls sit on the row's own hover surface ÔÇö no darker per-icon chip
    (Codex-style). Focus outline remains for keyboard; active pin is colour-only. */
@@ -6157,3 +6195,96 @@ body.host-wait-visible { padding-bottom: var(--host-wait-height, 76px); }
 body.host-wait-visible .settings-overlay,
 body.host-wait-visible .gfp-panel.gfp-overlay { bottom: var(--host-wait-height, 76px) !important; }
 .settings-pending { grid-column: 1 / -1; font-size: 12px; opacity: .8; }
+
+/* ── Project mark picker (media/repo-icon-picker.js) ─────────────────────────
+   Ninety-five marks is too many to scan, so the grid is never the first thing
+   you reach: focus lands in the search box and Enter takes the top hit. The
+   tabs are for browsing, the box is for knowing what you want. */
+.repo-icon-picker {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 296px;
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+  border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border));
+  border-radius: 8px;
+  box-shadow: 0 4px 16px color-mix(in oklab, var(--vscode-widget-shadow) 40%, transparent);
+}
+.repo-icon-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 26px;
+  padding: 3px 7px;
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  background: var(--vscode-input-background, transparent);
+  border: 1px solid var(--vscode-input-border, var(--vscode-editorWidget-border, transparent));
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+}
+.repo-icon-search:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.repo-icon-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
+.repo-icon-tab {
+  padding: 2px 6px;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.repo-icon-tab:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); }
+.repo-icon-tab.is-active {
+  color: var(--vscode-foreground);
+  background: color-mix(in oklab, var(--vscode-foreground) 12%, transparent);
+}
+.repo-icon-tab:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.repo-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  gap: 2px;
+  /* Eight rows before it scrolls: enough that a whole group is one glance,
+     short enough that the popover still fits above a rail row near the
+     bottom of a short window. */
+  max-height: 272px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.repo-icon-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.repo-icon-cell svg { width: 18px; height: 18px; }
+.repo-icon-cell:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
+.repo-icon-cell:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.repo-icon-cell.is-selected {
+  color: var(--vscode-foreground);
+  border-color: color-mix(in oklab, var(--vscode-focusBorder) 70%, transparent);
+  background: color-mix(in oklab, var(--vscode-foreground) 10%, transparent);
+}
+/* The default sits first in every tab and is the way back, so it is marked as
+   a different KIND of cell rather than just another glyph. */
+.repo-icon-cell.is-default { border-style: dashed; border-color: color-mix(in oklab, var(--vscode-foreground) 25%, transparent); }
+.repo-icon-empty { padding: 6px 2px; color: var(--vscode-descriptionForeground); font-size: 12px; }
+
+/* Touch: the universal 36px floor. The grid widens with the cells rather than
+   keeping eight cramped columns a thumb cannot hit. */
+@media (hover: none), (pointer: coarse) {
+  .repo-icon-search { min-height: 36px; }
+  .repo-icon-tab { min-height: 32px; }
+  .repo-icon-grid { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
+}

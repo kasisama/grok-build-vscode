@@ -2,6 +2,7 @@ import * as nodeFs from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import { isPrimerText, isPrimerSummary } from "./grok-primer";
+import { REPO_ICON_IDS } from "./repo-icon-ids";
 import {
   applyContextOccupancy,
   occupancyFromUsageLog,
@@ -362,6 +363,34 @@ export interface RepoColorChoice {
 }
 export type RepoColors = Record<string, RepoColorChoice>;
 
+/**
+ * Project marks — the glyph a project wears instead of a folder. Same shape as
+ * the colour above, deliberately: empty string is "none" (the default folder),
+ * the host puts `icon: ""` on every catalog row so the client can capability-
+ * probe on field presence, and a non-empty value names one entry in
+ * `media/repo-icons.js`.
+ *
+ * Both lists are generated from one table by `scripts/gen-repo-icons.mjs`, so
+ * the picker can never offer an id this allowlist rejects.
+ */
+export { REPO_ICON_IDS };
+export type RepoIconId = (typeof REPO_ICON_IDS)[number];
+/** Wire value: one of {@link REPO_ICON_IDS}, or `""` for the default folder. */
+export type RepoIcon = RepoIconId | "";
+
+export function isRepoIcon(value: unknown): value is RepoIcon {
+  if (value === "") return true;
+  return typeof value === "string" && (REPO_ICON_IDS as readonly string[]).includes(value);
+}
+
+/** Stored mark for one project. Absent entry ≡ the default folder; the wire
+ *  still emits `icon: ""` so capability detection stays field-presence based. */
+export interface RepoIconChoice {
+  cwd: string;
+  icon: RepoIconId;
+}
+export type RepoIcons = Record<string, RepoIconChoice>;
+
 export interface RepoListEntry {
   cwd: string;
   label: string;
@@ -402,6 +431,13 @@ export interface RepoListEntry {
    * deliberately ignores this field.
    */
   color?: RepoColor;
+  /**
+   * Project mark id flattened for the wire. **Present when the host supports
+   * project marks** — even when unset (`""`), the same capability rule as
+   * {@link RepoListEntry.color}. One of {@link REPO_ICON_IDS}, or empty for the
+   * default folder. Ordering in {@link discoverRepos} ignores it.
+   */
+  icon?: RepoIcon;
 }
 
 /** Move a renamed session's `customName` from one id to another and drop the source entry. Used when
@@ -738,6 +774,9 @@ export interface DiscoverReposDeps {
   /** Project folder colours. Always flattened onto every row as `color` (empty
    *  string when unset) so the client can capability-probe without a version. */
   colors?: RepoColors;
+  /** Project marks. Always flattened onto every row as `icon` (empty string
+   *  when unset) so the client can capability-probe without a version. */
+  icons?: RepoIcons;
   tmpDir: string;
   platform?: NodeJS.Platform;
   /** Host-known roots that remain selectable before Grok creates a catalog.
@@ -779,6 +818,13 @@ export function discoverRepos(deps: DiscoverReposDeps): RepoListEntry[] {
     const raw = deps.colors?.[key]?.color;
     return raw && (REPO_COLOR_IDS as readonly string[]).includes(raw) ? raw : "";
   };
+  // Same contract as colorOf. A stored id that this build no longer ships —
+  // downgrade, or an icon dropped from the curated set — collapses to the
+  // default folder rather than reaching a client that would draw nothing.
+  const iconOf = (key: string): RepoIcon => {
+    const raw = deps.icons?.[key]?.icon;
+    return raw && (REPO_ICON_IDS as readonly string[]).includes(raw) ? raw : "";
+  };
   for (const name of encoded) {
     let cwd = "";
     try { cwd = decodeURIComponent(name).trim(); } catch { continue; }
@@ -811,6 +857,7 @@ export function discoverRepos(deps: DiscoverReposDeps): RepoListEntry[] {
       updatedAt,
       worktreeLabel: deps.worktreeLabels?.get(key),
       color: colorOf(key),
+      icon: iconOf(key),
       ...archiveOf(key),
     });
   }
@@ -831,6 +878,7 @@ export function discoverRepos(deps: DiscoverReposDeps): RepoListEntry[] {
       updatedAt: 0,
       worktreeLabel: deps.worktreeLabels?.get(key),
       color: colorOf(key),
+      icon: iconOf(key),
       ...archiveOf(key),
     });
   }
@@ -855,6 +903,7 @@ export function discoverRepos(deps: DiscoverReposDeps): RepoListEntry[] {
       updatedAt: 0,
       worktreeLabel: deps.worktreeLabels?.get(key),
       color: colorOf(key),
+      icon: iconOf(key),
       ...archiveOf(key),
     });
   }

@@ -353,6 +353,17 @@ posted.
 - **The project holding the live conversation stays open** — its twisty is disabled, and a
   project folded *before* the conversation moved there springs open — including when that
   conversation lives in a worktree, whose cwd is not a catalog row
+- **Disclosure and identity are two controls** — the chevron leads the row and changes with
+  the fold; the project's MARK follows it and never does. The tests assert exactly that,
+  because it is what makes a rocket or a flask usable where an open/closed folder pair was
+  not. `test/repo-icons.test.ts` holds the generated catalogue to its allowlist: the ids
+  `media/repo-icons.js` draws and the ids `src/repo-icon-ids.ts` lets the host store are one
+  list, written by one script, or a picker offers marks `setRepoIcon` silently drops
+- **One mark, everywhere the project is named** — `file-panel.dom.test.ts` pins the panel
+  title to the project's mark and hue, and to its OWN folder for a scope that is not a
+  project (the provider-config mount) or a host that published no mark at all. The desktop's
+  docked tree reaches it over a `window` bridge, so `npm run e2e:screens` compares the two
+  drawn paths in the real app rather than trusting the wiring
 - **Search** reaches into Archived and forces it open, rather than answering "No matches"
   while the project sits collapsed below
 - **Global row identity** — duplicate source rows with one session id render once across

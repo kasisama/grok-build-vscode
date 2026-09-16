@@ -117,6 +117,7 @@
   let menuEl = null;
   let menuAnchorEl = null;
   let colorPickerEl = null;
+  let iconPickerEl = null;
 
   /**
    * Identity key for a project cwd. Mirrors `cwdKey` in media/chat.js and
@@ -215,6 +216,9 @@
   const pendingRepoColor = createPendingOverlay({
     onExpire() { render(); },
   });
+  const pendingRepoIcon = createPendingOverlay({
+    onExpire() { render(); },
+  });
   const pendingPins = new Map();
   let pinSequence = 0;
   let pinRequests = false;
@@ -276,6 +280,25 @@
     return typeof repo?.color === "string" ? repo.color : "";
   }
 
+  function repoIconOf(repo) {
+    const painted = pendingRepoIcon.valueFor(cwdKey(repo && repo.cwd));
+    if (painted !== undefined) return painted;
+    return typeof repo?.icon === "string" ? repo.icon : "";
+  }
+
+  /**
+   * Markup for a project's mark. The default — and the fallback for an id this
+   * build does not ship — is the filled folder, NOT the open/closed pair: the
+   * chevron beside it is what says open or closed now, so the mark is free to
+   * be an identity rather than a disclosure control. That separation is what
+   * makes any of the other 95 usable.
+   */
+  function repoMarkHTML(repo) {
+    const marks = typeof globalThis !== "undefined" ? globalThis.GrokRepoIcons : null;
+    if (!marks) return ICON.folderClosed;
+    return marks.svg(repoIconOf(repo)) || marks.svg("folder_open");
+  }
+
   function sessionRowName(s) {
     const painted = s && pendingRename.valueFor(s.id);
     if (painted !== undefined) return painted || "Untitled";
@@ -287,6 +310,11 @@
     render();
   }
 
+  function paintPendingRepoIcon(cwd, icon) {
+    pendingRepoIcon.paint(cwdKey(cwd), icon);
+    render();
+  }
+
   function paintPendingRename(id, name) {
     if (!id) return;
     pendingRename.paint(id, name);
@@ -294,7 +322,9 @@
   }
 
   function settlePendingRepoColor(entries) {
-    pendingRepoColor.settleAny((entries || []).map((r) => r && cwdKey(r.cwd)).filter(Boolean));
+    const keys = (entries || []).map((r) => r && cwdKey(r.cwd)).filter(Boolean);
+    pendingRepoColor.settleAny(keys);
+    pendingRepoIcon.settleAny(keys);
   }
 
   function settlePendingRename(entries) {
@@ -428,6 +458,13 @@
     }
   }
 
+  function closeIconPicker() {
+    if (iconPickerEl) {
+      iconPickerEl.remove();
+      iconPickerEl = null;
+    }
+  }
+
   /** Drop the action menu only. Colour picker is separate so "Set color" can
    *  close the menu and open the swatch grid in one click without the second
    *  step immediately dismissing itself. */
@@ -442,6 +479,7 @@
   function closeMenu() {
     closeMenuOnly();
     closeColorPicker();
+    closeIconPicker();
   }
 
   // A click somewhere else in VS Code never reaches this document, so a menu
@@ -676,6 +714,35 @@
     placePopover(picker, anchor, at ? { x: at.left, y: at.top } : undefined);
   }
 
+  /**
+   * Ninety-five marks plus the default folder, in six tabs with a search box.
+   * Host-persisted via setRepoIcon; capability-gated by iconSupported. The grid
+   * itself is media/repo-icon-picker.js, shared with the desktop/browser rail
+   * so both surfaces offer the same marks in the same order.
+   */
+  function openIconPicker(anchor, repo, at) {
+    closeIconPicker();
+    if (!anchor || !repo) return;
+    const builder = typeof globalThis !== "undefined" ? globalThis.GrokRepoIconPicker : null;
+    if (!builder) return;
+    const picker = builder.create({
+      currentIcon: repoIconOf(repo),
+      onClose() { closeIconPicker(); },
+      onPick(id) {
+        closeIconPicker();
+        vscode.postMessage({ type: "setRepoIcon", cwd: repo.cwd, icon: id });
+        // Paint now. The next `repos` frame that names this cwd is the
+        // authority — confirm, contradict, or a silent host's expiry.
+        paintPendingRepoIcon(repo.cwd, id);
+      },
+    });
+    if (!picker) return;
+    document.body.appendChild(picker.el);
+    iconPickerEl = picker.el;
+    placePopover(picker.el, anchor, at ? { x: at.left, y: at.top } : undefined);
+    picker.focus();
+  }
+
   document.addEventListener("click", (e) => {
     if (menuEl) {
       if (menuEl.contains(e.target)) return;
@@ -687,6 +754,7 @@
       return;
     }
     if (colorPickerEl && !colorPickerEl.contains(e.target)) closeColorPicker();
+    if (iconPickerEl && !iconPickerEl.contains(e.target)) closeIconPicker();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeMenu();
@@ -722,6 +790,13 @@
    */
   function colorSupported() {
     return state.repos.some((r) => typeof r.color === "string");
+  }
+
+  /** Same capability rule for marks — and the glyph data has to be on the page
+   *  too, since a picker with no paths would offer 96 empty squares. */
+  function iconSupported() {
+    const marks = typeof globalThis !== "undefined" ? globalThis.GrokRepoIcons : null;
+    return !!marks && state.repos.some((r) => typeof r.icon === "string");
   }
 
   /**
@@ -1316,9 +1391,20 @@
       (expanded ? "Collapse " : "Expand ") + (repo.label || leaf(repo.cwd)),
     );
 
+    // Disclosure first, identity second. The folder used to be both — open when
+    // expanded, closed when not — which is exactly why no other glyph could
+    // replace it: a rocket has no open variant. Splitting them frees the mark
+    // to say WHICH project while the chevron says open or closed, and the
+    // chevron states it without being pointed at, which dimming does not.
+    const chev = document.createElement("span");
+    chev.className = "rail-chevron";
+    chev.innerHTML = expanded ? ICON.chevronDown : ICON.chevronRight;
+    chev.setAttribute("aria-hidden", "true");
+    head.appendChild(chev);
+
     const twisty = document.createElement("span");
     twisty.className = "rail-twisty";
-    twisty.innerHTML = expanded ? ICON.folderOpen : ICON.folderClosed;
+    twisty.innerHTML = repoMarkHTML(repo);
     twisty.setAttribute("aria-hidden", "true");
     const repoColor = repoColorOf(repo);
     if (repoColor) twisty.dataset.repoColor = repoColor;
@@ -1454,11 +1540,20 @@
       if (colorSupported()) {
         items.push({
           label: "Set color",
-          title: "Tint this project's folder icon so it is easy to find",
+          title: "Tint this project's icon so it is easy to find",
           onSelect: () => openColorPicker(menuBtn, repo, lastMenuRect),
         });
-        items.push(null);
       }
+      // Under the colour, because they answer the same question in the same
+      // place: how do I recognise this project at a glance.
+      if (iconSupported()) {
+        items.push({
+          label: "Set icon",
+          title: "Give this project its own icon instead of a folder",
+          onSelect: () => openIconPicker(menuBtn, repo, lastMenuRect),
+        });
+      }
+      if (colorSupported() || iconSupported()) items.push(null);
       items.push({
         label: "Clear all history",
         danger: true,

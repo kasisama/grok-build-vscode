@@ -286,6 +286,13 @@ function parseRemoteWebviewMsg(msg: unknown): WebviewMsg | null {
       return isRemoteCwd(value.cwd) && typeof value.color === "string"
         ? msg as WebviewMsg
         : null;
+    case "setRepoIcon":
+      // Shape only, exactly as for the colour above: the host allowlists the
+      // mark id against REPO_ICON_IDS and re-checks the cwd against the live
+      // catalog. Empty string is a valid "default folder".
+      return isRemoteCwd(value.cwd) && typeof value.icon === "string"
+        ? msg as WebviewMsg
+        : null;
     // Shape-checked here like its repo-level sibling rather than riding the
     // `default` passthrough: the host validates too, but a malformed message
     // that reaches the host has already crossed the boundary this parser exists
