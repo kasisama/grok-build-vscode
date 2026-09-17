@@ -137,6 +137,17 @@ describe("the marks are sized wherever they are drawn", () => {
     }
   });
 
+  it("draws the project's mark at the size the design asks for", () => {
+    // 16px, and on BOTH sheets. The mark used to ride --rail-icon-size, which
+    // is 14 -- so it drew smaller than the action icons on its own row, and
+    // smaller than the design it came from. A number that lives in two files
+    // drifts in one of them; that is what this asserts against.
+    for (const css of [chatCss, railCss]) {
+      expect(css).toMatch(/--rail-mark-size:\s*16px/);
+      expect(css).toMatch(/\.rail-twisty\s+svg\s*\{[^}]*var\(--rail-mark-size\)/);
+    }
+  });
+
   it("gives the chevron a fixed box, so expanding does not shift the row", () => {
     // chevronRight is 14px and chevronDown is 12px, so without a box of its own
     // the mark and the name step sideways on every fold.

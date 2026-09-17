@@ -190,6 +190,12 @@ body {
      26px mark box. Change the chevron and this has to follow. */
   --rail-indent-nested: 32px;
   --rail-icon-size: 14px;
+  /* The project's mark is sized on its own, not off --rail-icon-size, because
+     it is an IDENTITY rather than an affordance: it is the thing the eye finds
+     when scanning for a project, and the design it comes from draws it at 16.
+     --rail-icon-size stays 14 for what it still feeds -- the worktree branch
+     glyph, and the side bar's action icons. */
+  --rail-mark-size: 16px;
   --rail-row-radius: 5px;
   --rail-hover-bg: var(--vscode-list-hoverBackground);
 }
@@ -668,7 +674,7 @@ body.rail-resizing * {
 .rail-action-btn.active { color: var(--vscode-foreground); background: transparent; }
 .rail-action-btn:focus-visible,
 .rail-more:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: -1px; }
-.rail-twisty svg { width: var(--rail-icon-size); height: var(--rail-icon-size); }
+.rail-twisty svg { width: var(--rail-mark-size); height: var(--rail-mark-size); }
 .rail-repo-name {
   display: flex;
   align-items: center;
