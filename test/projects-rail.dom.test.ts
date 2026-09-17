@@ -2878,6 +2878,50 @@ describe("the project icon picker", () => {
     ).not.toBe(null);
   });
 
+  it("narrows the grid to one category when a category is clicked", () => {
+    // Half the contract. The other half is CSS -- setting `hidden` on a cell
+    // whose stylesheet declares `display: grid` hides nothing at all -- and no
+    // DOM test can see that, because this harness applies no stylesheet. The
+    // companion assertion lives in repo-icons.test.ts.
+    const h = bootWebview({ remote: true, beforeScripts: withRail });
+    const picker = openPicker(h);
+    const cells = () => Array.from(picker.querySelectorAll(".repo-icon-cell")) as HTMLElement[];
+    const shown = () => cells().filter((c) => !c.hidden).length;
+    const all = shown();
+    expect(all, "the picker drew no marks").toBeGreaterThan(20);
+    const tab = Array.from(picker.querySelectorAll(".repo-icon-tab"))
+      .find((t) => t.textContent === "Build") as HTMLElement | undefined;
+    expect(tab, "the picker offers no Build category").not.toBe(undefined);
+    click(h.window, tab as HTMLElement);
+    expect(shown(), "clicking a category did not narrow the grid").toBeLessThan(all);
+    // The default is groupless on purpose: "put it back" must not hide behind
+    // a tab you would have to guess.
+    expect(
+      (picker.querySelector(".repo-icon-cell.is-default") as HTMLElement).hidden,
+      "the default folder hid itself behind a category",
+    ).toBe(false);
+  });
+
+  it("keeps the focus in its search box, so the keyboard it raised can be typed into", () => {
+    // The keyboard IS the resize, so the element that raised it is exactly the
+    // element a resize must not blur. The first version of this fix took the
+    // picker out of the document and put it straight back: the markup after is
+    // identical, and the focus is gone. Dispatching a resize at an UNFOCUSED
+    // picker -- which is what the test above does -- is the one state where
+    // that cannot show, so this asserts on focus and not on the node.
+    const h = bootWebview({ remote: true, beforeScripts: withRail });
+    const picker = openPicker(h);
+    const search = picker.querySelector(".repo-icon-search") as HTMLElement;
+    expect(search, "the picker has no search box").not.toBe(null);
+    search.focus();
+    expect(h.doc.activeElement, "the search box would not take focus").toBe(search);
+    h.window.dispatchEvent(new h.window.Event("resize"));
+    expect(
+      h.doc.activeElement,
+      "the resize blurred the search box -- so tapping it raises a keyboard that closes again",
+    ).toBe(search);
+  });
+
   it("still lets a resize close a menu, which is what that listener is for", () => {
     const h = bootWebview({ remote: true, beforeScripts: withRail });
     dispatch(h.window, {

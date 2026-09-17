@@ -5749,9 +5749,16 @@
     if (railIconPickerEl) { railIconPickerEl.remove(); railIconPickerEl = null; }
   }
 
-  function closeRailMenu() {
+  /** Just the menu. Every dismissal wants the pickers gone with it -- except a
+   *  resize, which is usually the on-screen keyboard opening underneath a
+   *  picker the user is working in. */
+  function closeRailMenuOnly() {
     railMenuAnchorEl = null;
     if (railMenuEl) { railMenuEl.remove(); railMenuEl = null; }
+  }
+
+  function closeRailMenu() {
+    closeRailMenuOnly();
     closeRailColorPicker();
     closeRailIconPicker();
   }
@@ -6034,26 +6041,25 @@
      raises no keyboard, so the bug looked like "icons are broken, colours are
      fine" rather than what it was.
 
-     So the menu still closes, and a picker follows its anchor instead. If the
-     anchor is gone -- a rebuild replaced the row -- there is nothing to follow
-     and closing is still the honest answer. */
+     So the menu closes and a live picker is re-placed against its anchor
+     WITHOUT leaving the document. Taking it out and putting it straight back
+     looks identical in the markup and is not: removing a node blurs whatever
+     was focused inside it. Tapping the search box would raise the keyboard,
+     the keyboard would fire this resize, and the box would lose the focus that
+     raised it -- every time, so the box could never be typed into. Nothing
+     here removes a picker except the one case that must: the anchor is gone, a
+     rebuild took the row away, and there is nothing left to point at. */
   window.addEventListener("resize", () => {
-    const iconAnchor = railIconPickerAnchorEl;
-    const colorAnchor = railColorPickerAnchorEl;
-    const iconEl = railIconPickerEl;
-    const colorEl = railColorPickerEl;
-    closeRailMenu();
-    if (iconEl && iconAnchor && iconAnchor.isConnected) {
-      document.body.appendChild(iconEl);
-      railIconPickerEl = iconEl;
-      railIconPickerAnchorEl = iconAnchor;
-      placeRailPopover(iconEl, iconAnchor);
+    closeRailMenuOnly();
+    if (railIconPickerEl) {
+      if (railIconPickerAnchorEl && railIconPickerAnchorEl.isConnected) {
+        placeRailPopover(railIconPickerEl, railIconPickerAnchorEl);
+      } else closeRailIconPicker();
     }
-    if (colorEl && colorAnchor && colorAnchor.isConnected) {
-      document.body.appendChild(colorEl);
-      railColorPickerEl = colorEl;
-      railColorPickerAnchorEl = colorAnchor;
-      placeRailPopover(colorEl, colorAnchor);
+    if (railColorPickerEl) {
+      if (railColorPickerAnchorEl && railColorPickerAnchorEl.isConnected) {
+        placeRailPopover(railColorPickerEl, railColorPickerAnchorEl);
+      } else closeRailColorPicker();
     }
   });
 
