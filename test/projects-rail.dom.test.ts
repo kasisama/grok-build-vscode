@@ -2937,6 +2937,42 @@ describe("the project icon picker", () => {
     expect(h.doc.querySelector(".rail-menu")).toBe(null);
   });
 
+  it("survives the catalog refresh the host sends whenever a file changes", () => {
+    // The rebuild used to close both pickers outright, so on a phone and in
+    // the desktop app the grid vanished while you were reading it -- the same
+    // report the VS Code side bar got, from the same producer: the host
+    // re-sends the catalog whenever the files behind it change, and another
+    // agent writing transcripts drives that every second or two.
+    //
+    // The rebuild here is a repo RENAME, not a sessions frame, for the reason
+    // the VS Code suite records: sessions do not render under a collapsed
+    // project, so "still there" would pass for the wrong reason. A project row
+    // is always drawn, so the renamed label proves the rail really did rebuild
+    // under the open picker.
+    const h = bootWebview({ remote: true, beforeScripts: withRail });
+    const picker = openPicker(h);
+    expect(picker).not.toBe(null);
+    const search = picker.querySelector(".repo-icon-search") as HTMLElement;
+    search.focus();
+    dispatch(h.window, {
+      type: "repos",
+      entries: withMarks(repos).map((r) =>
+        r.cwd === "/work/gamma" ? { ...r, label: "renamed" } : r),
+      selectedCwd: "/work/alpha",
+      activeCwd: "/work/alpha",
+    });
+    expect(repoNames(h.doc), "the rail did not rebuild, so this proves nothing")
+      .toContain("renamed");
+    expect(
+      h.doc.querySelector(".repo-icon-picker"),
+      "the rail rebuild closed the picker the user was reading",
+    ).toBe(picker);
+    expect(
+      h.doc.activeElement,
+      "the picker survived but lost its focus -- it was taken out and put back",
+    ).toBe(search);
+  });
+
   it("closes rather than strands itself when its anchor is gone", () => {
     // The other half of the rule: follow the anchor while it exists, and give
     // up when a rebuild has taken the row away, rather than leaving a fixed

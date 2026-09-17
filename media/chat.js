@@ -5726,6 +5726,10 @@
   let railColorPickerAnchorEl = null;
   let railIconPickerEl = null;
   let railIconPickerAnchorEl = null;
+  // The live node answers "was this click on my own anchor"; the KEY is what
+  // survives a rebuild that replaces that node. The menu has always kept one.
+  let railColorPickerAnchorKey = "";
+  let railIconPickerAnchorKey = "";
 
   /** Palette the host accepts — keep ids in lockstep with REPO_COLOR_IDS in
    *  sessions.ts. Labels are accessible names for each swatch. */
@@ -5741,12 +5745,24 @@
 
   function closeRailColorPicker() {
     railColorPickerAnchorEl = null;
+    railColorPickerAnchorKey = "";
     if (railColorPickerEl) { railColorPickerEl.remove(); railColorPickerEl = null; }
   }
 
   function closeRailIconPicker() {
     railIconPickerAnchorEl = null;
+    railIconPickerAnchorKey = "";
     if (railIconPickerEl) { railIconPickerEl.remove(); railIconPickerEl = null; }
+  }
+
+  /** The button carrying a rail menu key, after a rebuild replaced the node.
+   *  Shared by the menu and both pickers so the three cannot disagree about
+   *  where an open popover belongs. Searches the whole document, not just the
+   *  rail: the conversation overflow is outside `#projects-rail`. */
+  function railPopoverAnchorFor(key) {
+    if (!key) return null;
+    const esc = window.CSS && CSS.escape ? CSS.escape(key) : key;
+    return document.querySelector('[data-rail-menu-key="' + esc + '"]');
   }
 
   /** Just the menu. Every dismissal wants the pickers gone with it -- except a
@@ -5880,6 +5896,8 @@
     });
     document.body.appendChild(picker);
     railColorPickerEl = picker;
+    railColorPickerAnchorEl = anchor;
+    railColorPickerAnchorKey = (anchor.dataset && anchor.dataset.railMenuKey) || "";
     placeRailPopover(picker, anchor);
     const focusBtn = swatches.find((b) => b.classList.contains("is-selected")) || swatches[0];
     if (focusBtn) focusBtn.focus();
@@ -5917,6 +5935,7 @@
     document.body.appendChild(picker.el);
     railIconPickerEl = picker.el;
     railIconPickerAnchorEl = anchor;
+    railIconPickerAnchorKey = (anchor.dataset && anchor.dataset.railMenuKey) || "";
     placeRailPopover(picker.el, anchor);
     // On a touch screen the search box is the wrong thing to focus: the
     // keyboard it raises covers most of a 96-mark grid the moment it opens,
@@ -7082,11 +7101,28 @@
     // menu and the header menu survive the wipe.
     renderSessionHead();
     reanchorOpenRailMenu(openMenuKey);
-    // Colour picker is one-shot and short-lived — the rebuild destroys its
-    // anchor button, and re-opening it mid-catalog-refresh is not worth the
-    // bookkeeping. Closing avoids a fixed popover stranded over a gone row.
-    if (railColorPickerEl) closeRailColorPicker();
-    if (railIconPickerEl) closeRailIconPicker();
+    // And so do the pickers. They used to be closed here, on the reasoning
+    // that a picker is one-shot and short-lived and the rebuild destroys the
+    // ⋯ it points at. The second half is true of the menu one line up, which
+    // has been re-anchored by key ever since the owner reported it slamming
+    // shut; the first half was never true of the icon grid. It is the one
+    // popover people SIT in -- ninety-six marks, a search box, six tabs -- and
+    // the host re-sends this catalog whenever the files behind it change, so
+    // another agent writing transcripts closed it every second or two. That is
+    // the report `136eae6` answered on the VS Code side bar by holding the
+    // rebuild; here the key is already stamped on every ⋯ and the answer costs
+    // one lookup. Gone anchor still closes: a fixed popover pointing at a row
+    // that no longer exists is worse than no popover.
+    if (railIconPickerEl) {
+      const a = railPopoverAnchorFor(railIconPickerAnchorKey);
+      if (a) { railIconPickerAnchorEl = a; placeRailPopover(railIconPickerEl, a); }
+      else closeRailIconPicker();
+    }
+    if (railColorPickerEl) {
+      const a = railPopoverAnchorFor(railColorPickerAnchorKey);
+      if (a) { railColorPickerAnchorEl = a; placeRailPopover(railColorPickerEl, a); }
+      else closeRailColorPicker();
+    }
     railHoldHoverAfterRebuild();
     // Let the browser paint this rebuild with transitions off, then restore them
     // so an ordinary hover still fades. rAF (not a timer) so it lands after the
@@ -7103,8 +7139,7 @@
    *  rail: the conversation overflow is outside `#projects-rail`. */
   function reanchorOpenRailMenu(openMenuKey) {
     if (!openMenuKey) return;
-    const esc = window.CSS && CSS.escape ? CSS.escape(openMenuKey) : openMenuKey;
-    const anchor = document.querySelector('[data-rail-menu-key="' + esc + '"]');
+    const anchor = railPopoverAnchorFor(openMenuKey);
     if (anchor) {
       railMenuAnchorEl = anchor;
       // Re-place it. Keeping the menu open but leaving it at the old fixed
