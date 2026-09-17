@@ -18,11 +18,6 @@ export function desktopDevToolsAllowed(isPackaged: boolean): boolean {
   return !isPackaged;
 }
 
-/**
- * Open DevTools at startup only when explicitly requested AND the build is
- * unpackaged. Separate from the relay-dev staging URL — someone can want one
- * without the other.
- */
 export function shouldOpenDevToolsAtStartup(opts: {
   isPackaged: boolean;
   env?: NodeJS.ProcessEnv;
@@ -39,19 +34,13 @@ export function shouldOpenDevToolsAtStartup(opts: {
 export interface DesktopAppMenuActions {
   addProjectFolder?: () => void;
   removeProjectFolder?: () => void;
-  /** CSS `--chat-zoom` (same path as Cmd+= / the Text size slider). */
   zoomIn?: () => void;
   zoomOut?: () => void;
   resetZoom?: () => void;
 }
 
-/** Accelerator for Toggle Developer Tools (works with autoHideMenuBar). */
 export const DESKTOP_DEVTOOLS_ACCELERATOR = "CmdOrCtrl+Shift+I";
 
-/**
- * True when a keyboard event should toggle DevTools (unpackaged only).
- * Covers Ctrl/Cmd+Shift+I and F12 — neither needs the menu bar to be visible.
- */
 export function isDesktopDevToolsShortcut(input: {
   type?: string;
   key?: string;
@@ -63,18 +52,12 @@ export function isDesktopDevToolsShortcut(input: {
   if (input.type !== "keyDown") return false;
   const key = String(input.key || "");
   if (key === "F12") return true;
-  // Electron Input: key is often "I" with modifiers; also accept "i".
   if ((key === "I" || key === "i") && input.shift && (input.control || input.meta) && !input.alt) {
     return true;
   }
   return false;
 }
 
-/**
- * Second launch of the same profile (single-instance lock) should open DevTools
- * when the new argv/env asked for it — otherwise `npm run desktop-dev` looks
- * like a silent no-op while a leftover process holds the lock.
- */
 export function secondInstanceShouldOpenDevTools(opts: {
   isPackaged: boolean;
   commandLine?: string[];
@@ -90,15 +73,6 @@ export function secondInstanceShouldOpenDevTools(opts: {
   });
 }
 
-/**
- * Application menu template: no stock Electron Help links; public repo only.
- * File → Add/Close Project Folder drive multi-folder (rail + config store).
- * View → Toggle Developer Tools only when `!isPackaged`. The accelerator
- * (CmdOrCtrl+Shift+I) is registered with the menu and still fires while
- * autoHideMenuBar hides the bar on Windows — Alt is not required. main.ts also
- * wires F12 / the same chord via before-input-event, and gear → Advanced offers
- * the same action, so discoverability does not depend on a hidden menu bar.
- */
 export function desktopAppMenuTemplate(opts: {
   isPackaged: boolean;
   platform?: NodeJS.Platform;
@@ -115,24 +89,20 @@ export function desktopAppMenuTemplate(opts: {
   const allowDevTools = desktopDevToolsAllowed(opts.isPackaged);
 
   const viewSubmenu: MenuItemConstructorOptions[] = [
-    { role: "reload" },
-    { role: "forceReload" },
+    { role: "reload", label: "重新加载" },
+    { role: "forceReload", label: "强制重新加载" },
     ...(allowDevTools
       ? [
           {
             role: "toggleDevTools" as const,
-            label: "Toggle Developer Tools",
+            label: "切换开发者工具",
             accelerator: DESKTOP_DEVTOOLS_ACCELERATOR,
           },
         ]
       : []),
     { type: "separator" },
-    // Click-only: Chromium zoomIn/Out/resetZoom roles change webContents
-    // zoomFactor, which stacks on body `--chat-zoom` and is the boot-layout
-    // race. Keyboard Cmd+=/−/0 stay in chat.js (`setClientFontScale`) so a
-    // menu accelerator cannot double-step. No roles here.
     {
-      label: "Actual Size",
+      label: "实际大小",
       click: () => {
         try {
           actions?.resetZoom?.();
@@ -142,7 +112,7 @@ export function desktopAppMenuTemplate(opts: {
       },
     },
     {
-      label: "Zoom In",
+      label: "放大",
       click: () => {
         try {
           actions?.zoomIn?.();
@@ -152,7 +122,7 @@ export function desktopAppMenuTemplate(opts: {
       },
     },
     {
-      label: "Zoom Out",
+      label: "缩小",
       click: () => {
         try {
           actions?.zoomOut?.();
@@ -162,7 +132,7 @@ export function desktopAppMenuTemplate(opts: {
       },
     },
     { type: "separator" },
-    { role: "togglefullscreen" },
+    { role: "togglefullscreen", label: "全屏" },
   ];
 
   return [
@@ -171,7 +141,7 @@ export function desktopAppMenuTemplate(opts: {
           {
             label: DESKTOP_APP_FULL_NAME,
             submenu: [
-              { role: "about" as const, label: `About ${DESKTOP_APP_FULL_NAME}` },
+              { role: "about" as const, label: `关于 ${DESKTOP_APP_FULL_NAME}` },
               { type: "separator" as const },
               { role: "services" as const },
               { type: "separator" as const },
@@ -185,10 +155,10 @@ export function desktopAppMenuTemplate(opts: {
         ]
       : []),
     {
-      label: "File",
+      label: "文件",
       submenu: [
         {
-          label: "Add Project Folder…",
+          label: "添加项目文件夹…",
           click: () => {
             try {
               actions?.addProjectFolder?.();
@@ -198,7 +168,7 @@ export function desktopAppMenuTemplate(opts: {
           },
         },
         {
-          label: "Close Project Folder",
+          label: "关闭项目文件夹",
           click: () => {
             try {
               actions?.removeProjectFolder?.();
@@ -208,36 +178,36 @@ export function desktopAppMenuTemplate(opts: {
           },
         },
         { type: "separator" },
-        isMac ? { role: "close" } : { role: "quit", label: "Quit" },
+        isMac ? { role: "close" } : { role: "quit", label: "退出" },
       ],
     },
     {
-      label: "Edit",
+      label: "编辑",
       submenu: [
-        { role: "undo" },
-        { role: "redo" },
+        { role: "undo", label: "撤销" },
+        { role: "redo", label: "重做" },
         { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { role: "selectAll" },
+        { role: "cut", label: "剪切" },
+        { role: "copy", label: "复制" },
+        { role: "paste", label: "粘贴" },
+        { role: "selectAll", label: "全选" },
       ],
     },
     {
-      label: "View",
+      label: "查看",
       submenu: viewSubmenu,
     },
     {
-      label: "Help",
+      label: "帮助",
       submenu: [
         {
-          label: "GitHub Repository",
+          label: "GitHub 仓库",
           click: () => {
             openRepo();
           },
         },
         {
-          label: `About ${DESKTOP_APP_FULL_NAME}`,
+          label: `关于 ${DESKTOP_APP_FULL_NAME}`,
           click: () => {
             openRepo();
           },
