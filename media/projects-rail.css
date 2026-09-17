@@ -1250,6 +1250,13 @@ a.add-project-github-open {
   border-radius: 5px;
   cursor: pointer;
 }
+/* The `display: grid` above is an author rule, and an author `display` beats
+   the UA stylesheet's [hidden] { display: none } outright. Without this the
+   filter sets `hidden` on ninety cells and all ninety-six stay on screen, so
+   both the category tabs and the search box look dead -- which is how they
+   were reported. Eight other elements in this file already carry the same
+   line; the picker's cells were the ones that missed it. */
+.repo-icon-cell[hidden] { display: none; }
 .repo-icon-cell svg { width: 18px; height: 18px; }
 .repo-icon-cell:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
 .repo-icon-cell:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }

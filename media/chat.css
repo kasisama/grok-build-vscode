@@ -1071,6 +1071,12 @@ body.desk:not(.desk-with-ft) .rail-action-btn { width: 24px; height: 24px; }
     --rail-repo-min-height: 40px;
     --rail-row-font-size: 15px;
     --rail-repo-font-size: 16px;
+    /* The mark rides with the glyphs beside it. Everything else on this row is
+       20px here, and the comment on that rule says why: on a 36px tap target a
+       smaller glyph "read as a different, lesser control". A project's own mark
+       is the last thing that should read as lesser, and at 16 against the
+       compose button's 20 it was the odd one out. */
+    --rail-mark-size: 20px;
   }
   .rail-repo-actions,
   .rail-session-actions {
@@ -6318,6 +6324,13 @@ body.host-wait-visible .gfp-panel.gfp-overlay { bottom: var(--host-wait-height, 
   border-radius: 5px;
   cursor: pointer;
 }
+/* The `display: grid` above is an author rule, and an author `display` beats
+   the UA stylesheet's [hidden] { display: none } outright. Without this the
+   filter sets `hidden` on ninety cells and all ninety-six stay on screen, so
+   both the category tabs and the search box look dead -- which is how they
+   were reported. Eight other elements in this file already carry the same
+   line; the picker's cells were the ones that missed it. */
+.repo-icon-cell[hidden] { display: none; }
 .repo-icon-cell svg { width: 18px; height: 18px; }
 .repo-icon-cell:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
 .repo-icon-cell:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }

@@ -148,6 +148,27 @@ describe("the marks are sized wherever they are drawn", () => {
     }
   });
 
+  it("lets a filtered-out mark actually disappear, on both sheets", () => {
+    // `.repo-icon-cell` declares `display: grid`, so the UA stylesheet's
+    // [hidden] { display: none } loses to it and the attribute the filter sets
+    // does nothing on its own. Both the category tabs and the search box run
+    // through that attribute, so without this rule both controls are inert
+    // while looking perfectly healthy -- reported from a phone as "clicking
+    // icon categories does nothing".
+    for (const css of [chatCss, railCss]) {
+      expect(css).toMatch(/\.repo-icon-cell\[hidden\]\s*\{[^}]*display:\s*none/);
+    }
+  });
+
+  it("grows the mark with the glyphs beside it on touch", () => {
+    // Only chat.css: the side bar is never a touch surface, and its action
+    // glyphs stay 14px there, so its mark leads at 16 as the design intends.
+    // Here every other glyph on the row is 20px, and a 16px mark beside them
+    // reads as the lesser control -- which is what was reported from a phone.
+    const touch = chatCss.slice(chatCss.indexOf("@media (hover: none) {"));
+    expect(touch.slice(0, touch.indexOf("}"))).toMatch(/--rail-mark-size:\s*20px/);
+  });
+
   it("gives the chevron a fixed box, so expanding does not shift the row", () => {
     // chevronRight is 14px and chevronDown is 12px, so without a box of its own
     // the mark and the name step sideways on every fold.
