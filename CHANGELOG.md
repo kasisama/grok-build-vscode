@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.8.0 — 2026-09-17
+
+**A project can now wear an icon, so you can find it without reading.** Colour told two projects apart; it could not say which was which, and a rail of six tinted folders is still six folders. Each project now carries a mark you choose, drawn everywhere the project is named.
+
+### Added
+
+- **Give a project an icon (#165).** **Set icon**, on a project's ⋯ menu or its right-click menu, opens a grid of ninety-five marks in six groups — Shapes, Build, Work, Talk, People, Play — with a search over their names and the plain folder at the top to go back to none. What you pick is drawn on the project's row in the rail, on the chip above the message box, in the project switcher and above the file panel, and it is the same glyph in every one of them. It belongs to the project rather than to the machine you set it on, so it follows you from VS Code to the desktop app to a Cloud machine to your phone.
+
+### Fixed
+
+- **Menus on a project row stop closing themselves.** In VS Code every popover on a project row — the ⋯ menu, the colour swatches, the new icon grid — closed itself every second or two. The rail rebuilds whenever the conversation files behind it change, and another extension writing its own transcripts is enough to drive that indefinitely; the rebuild now waits until you are finished with the menu. It was always this way — a menu you dismiss in two seconds tolerates it, a grid of marks you are reading does not.
+
+- **Conversations sit under their project on your phone and in the desktop app.** A project's row indents for its fold arrow and its conversations did not, so a conversation sat to the left of the project it belongs to and the rail read as a flat list. The VS Code side bar had already been fixed for this; the phone, which is where it was reported, had not.
+
 ## 4.7.0 — 2026-09-16
 
 **Linux is a platform we offer, not just one we use.** The desktop app has built a Linux AppImage on every release since 4.5.2 — it is what Cloud machines run — but it was never offered to anyone, and the few people who found it got no updates. Both halves are fixed. Nothing changes in the VS Code extension itself; this release is the desktop app and the download page.
