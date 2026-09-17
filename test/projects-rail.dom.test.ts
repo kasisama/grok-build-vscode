@@ -2832,3 +2832,80 @@ describe("the shell can close the renderer's toolbar popovers", () => {
     expect(layers.dismissTop()).toBe(false);
   });
 });
+
+/**
+ * The icon picker has to survive the keyboard it raises.
+ *
+ * A resize closes the rail's menus, which is right for a MENU -- it hangs under
+ * a row that has probably moved. It was wrong for a picker the user is working
+ * in, because on a phone the on-screen keyboard IS a resize: the picker focused
+ * its search box, the keyboard opened, the resize fired, and the picker removed
+ * itself the frame after it appeared. The owner saw "something flashes and
+ * disappears", and only for icons -- the colour picker focuses a swatch button,
+ * raises no keyboard, and never hit it.
+ *
+ * No browser gate could catch this. `e2e:screens` drives real Chromium and
+ * opens this very picker, but a headless browser has no software keyboard, so
+ * the resize never fires there. The event is the whole mechanism, so a test
+ * that dispatches it is the honest gate.
+ */
+describe("the project icon picker", () => {
+  const withMarks = (entries = repos) =>
+    entries.map((r) => ({ ...r, color: "", icon: r.cwd === "/work/beta" ? "rocket" : "" }));
+
+  const openPicker = (h: any) => {
+    dispatch(h.window, {
+      type: "repos",
+      entries: withMarks(),
+      selectedCwd: "/work/alpha",
+      activeCwd: "/work/alpha",
+    });
+    const alpha = h.doc.querySelectorAll(".rail-repo")[repoNames(h.doc).indexOf("alpha")];
+    const menu = openMenu(h.window, alpha.querySelector(".rail-repo-head") as HTMLElement);
+    const item = menuItem(menu, "Set icon");
+    expect(item, "the project menu offers no Set icon").not.toBe(undefined);
+    click(h.window, item as HTMLElement);
+    return h.doc.querySelector(".repo-icon-picker") as HTMLElement;
+  };
+
+  it("stays open when the on-screen keyboard resizes the window", () => {
+    const h = bootWebview({ remote: true, beforeScripts: withRail });
+    expect(openPicker(h)).not.toBe(null);
+    h.window.dispatchEvent(new h.window.Event("resize"));
+    expect(
+      h.doc.querySelector(".repo-icon-picker"),
+      "the picker closed itself on a resize -- the keyboard is a resize",
+    ).not.toBe(null);
+  });
+
+  it("still lets a resize close a menu, which is what that listener is for", () => {
+    const h = bootWebview({ remote: true, beforeScripts: withRail });
+    dispatch(h.window, {
+      type: "repos",
+      entries: withMarks(),
+      selectedCwd: "/work/alpha",
+      activeCwd: "/work/alpha",
+    });
+    const alpha = h.doc.querySelectorAll(".rail-repo")[repoNames(h.doc).indexOf("alpha")];
+    openMenu(h.window, alpha.querySelector(".rail-repo-head") as HTMLElement);
+    expect(h.doc.querySelector(".rail-menu")).not.toBe(null);
+    h.window.dispatchEvent(new h.window.Event("resize"));
+    expect(h.doc.querySelector(".rail-menu")).toBe(null);
+  });
+
+  it("closes rather than strands itself when its anchor is gone", () => {
+    // The other half of the rule: follow the anchor while it exists, and give
+    // up when a rebuild has taken the row away, rather than leaving a fixed
+    // popover pointing at nothing.
+    const h = bootWebview({ remote: true, beforeScripts: withRail });
+    expect(openPicker(h)).not.toBe(null);
+    dispatch(h.window, {
+      type: "repos",
+      entries: withMarks(repos.filter((r) => r.cwd !== "/work/alpha")),
+      selectedCwd: "/work/beta",
+      activeCwd: "/work/beta",
+    });
+    h.window.dispatchEvent(new h.window.Event("resize"));
+    expect(h.doc.querySelector(".repo-icon-picker")).toBe(null);
+  });
+});

@@ -5725,6 +5725,7 @@
   let railColorPickerEl = null;
   let railColorPickerAnchorEl = null;
   let railIconPickerEl = null;
+  let railIconPickerAnchorEl = null;
 
   /** Palette the host accepts — keep ids in lockstep with REPO_COLOR_IDS in
    *  sessions.ts. Labels are accessible names for each swatch. */
@@ -5744,6 +5745,7 @@
   }
 
   function closeRailIconPicker() {
+    railIconPickerAnchorEl = null;
     if (railIconPickerEl) { railIconPickerEl.remove(); railIconPickerEl = null; }
   }
 
@@ -5907,8 +5909,16 @@
     if (!picker) return;
     document.body.appendChild(picker.el);
     railIconPickerEl = picker.el;
+    railIconPickerAnchorEl = anchor;
     placeRailPopover(picker.el, anchor);
-    picker.focus();
+    // On a touch screen the search box is the wrong thing to focus: the
+    // keyboard it raises covers most of a 96-mark grid the moment it opens,
+    // and the user came here to LOOK. Focus the grid instead and let them tap
+    // the box if they would rather type. With a mouse, typing is the fastest
+    // way to 96 marks and the box keeps the focus.
+    let coarse = false;
+    try { coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches); } catch (_) { /* older webview */ }
+    picker.focus(coarse);
   }
 
   /** items: [{ label, icon, danger, disabled, onSelect }] — a `null` entry is a
@@ -6016,7 +6026,36 @@
       closeRailMenu();
     }
   });
-  window.addEventListener("resize", closeRailMenu);
+  /* A resize used to close everything, which is right for a MENU -- it hangs
+     under a row that has probably moved -- and wrong for a picker the user is
+     working in. The on-screen keyboard is a resize: focusing the icon picker's
+     search box opened it, the resize fired, and the picker vanished the frame
+     after it appeared. The colour picker survived only because a swatch button
+     raises no keyboard, so the bug looked like "icons are broken, colours are
+     fine" rather than what it was.
+
+     So the menu still closes, and a picker follows its anchor instead. If the
+     anchor is gone -- a rebuild replaced the row -- there is nothing to follow
+     and closing is still the honest answer. */
+  window.addEventListener("resize", () => {
+    const iconAnchor = railIconPickerAnchorEl;
+    const colorAnchor = railColorPickerAnchorEl;
+    const iconEl = railIconPickerEl;
+    const colorEl = railColorPickerEl;
+    closeRailMenu();
+    if (iconEl && iconAnchor && iconAnchor.isConnected) {
+      document.body.appendChild(iconEl);
+      railIconPickerEl = iconEl;
+      railIconPickerAnchorEl = iconAnchor;
+      placeRailPopover(iconEl, iconAnchor);
+    }
+    if (colorEl && colorAnchor && colorAnchor.isConnected) {
+      document.body.appendChild(colorEl);
+      railColorPickerEl = colorEl;
+      railColorPickerAnchorEl = colorAnchor;
+      placeRailPopover(colorEl, colorAnchor);
+    }
+  });
 
   /** The ⋯ button itself — same shape for a project row, a conversation row and
    *  the conversation header, so one class carries all three. */
@@ -7002,7 +7041,6 @@
         group: "archived",
         open,
         forcedOpenBySearch: forcedOpen,
-        icon: ICON.archive,
         openTitle: "Hide archived projects",
         closedTitle: "Show archived projects",
         searchTitle: "Open while your search matches an archived project",

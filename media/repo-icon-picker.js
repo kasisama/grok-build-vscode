@@ -208,10 +208,19 @@
 
     return {
       el,
-      focus() {
-        // The search box, not the grid: the fastest way to 95 marks is to type
-        // the one you want, and arrows still reach the grid from here.
-        try { search.focus(); } catch (_) { /* detached */ }
+      /** `preferGrid` focuses the current mark rather than the search box, for
+       *  a caller that does not want an on-screen keyboard raised over the
+       *  grid. Default stays the search box: with a keyboard already present,
+       *  typing is the fastest way to 96 marks, and arrows reach the grid. */
+      focus(preferGrid) {
+        try {
+          if (preferGrid) {
+            const cell = el.querySelector(".repo-icon-cell.is-selected") ||
+              el.querySelector(".repo-icon-cell");
+            if (cell) { cell.tabIndex = 0; cell.focus(); return; }
+          }
+          search.focus();
+        } catch (_) { /* detached */ }
       },
     };
   }
