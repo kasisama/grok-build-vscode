@@ -456,6 +456,7 @@
       colorPickerEl.remove();
       colorPickerEl = null;
     }
+     flushDeferredRender();
   }
 
   function closeIconPicker() {
@@ -463,6 +464,7 @@
       iconPickerEl.remove();
       iconPickerEl = null;
     }
+     flushDeferredRender();
   }
 
   /** Drop the action menu only. Colour picker is separate so "Set color" can
@@ -474,12 +476,52 @@
       menuEl = null;
     }
     menuAnchorEl = null;
+    flushDeferredRender();
   }
 
   function closeMenu() {
     closeMenuOnly();
     closeColorPicker();
     closeIconPicker();
+  }
+
+  /**
+   * Hold the rail still while a popover is up.
+   *
+   * `render()` throws every node in #rail-scroll away and builds it again, so
+   * it used to close the menu and both pickers first -- their anchors were
+   * about to stop existing. That is fine when a rebuild is a rare event and
+   * ruinous when it is not: the host re-sends sessions whenever the files
+   * backing them change, and ANOTHER extension writing its own transcripts is
+   * enough to drive that every second or two. The owner, in VS Code: "all
+   * popups close every 1-3 sec... context menu under ..., color, icon".
+   *
+   * The chat.js rail answers this by re-anchoring an open menu to the button
+   * that replaced its anchor. Here the simpler answer holds, and it removes
+   * work rather than adding it: nothing under an open popover needs to move
+   * for the few seconds it is up, so the rebuild waits for it. Nothing can be
+   * lost, because every close path flushes -- and the frame that lands is the
+   * newest state, not the one that was deferred.
+   *
+   * What this costs, said plainly: the rail is a beat stale while you have a
+   * menu open. That is the same beat in which you are looking at the menu.
+   */
+  let renderDeferred = false;
+
+  function railPopoverOpen() {
+    return !!(menuEl || colorPickerEl || iconPickerEl);
+  }
+
+  function flushDeferredRender() {
+    if (!renderDeferred) return;
+    // Out of line, so a close that runs mid-handler -- the menu item that
+    // closes itself and then opens a picker -- finishes before the rail is
+    // rebuilt under it.
+    setTimeout(() => {
+      if (!renderDeferred || railPopoverOpen()) return;
+      renderDeferred = false;
+      render();
+    }, 0);
   }
 
   // A click somewhere else in VS Code never reaches this document, so a menu
@@ -880,9 +922,10 @@
   function render() {
     const root = document.getElementById("rail-scroll");
     if (!root) return;
+    // Not while the user is working in one -- see flushDeferredRender.
+    if (railPopoverOpen()) { renderDeferred = true; return; }
     root.classList.add("rail-rebuilding");
     root.innerHTML = "";
-    closeMenu();
 
     const q = state.filter.trim();
     let shown = false;

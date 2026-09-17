@@ -214,6 +214,58 @@ it("removes abandoned sessions from selected rows, previews, pins and Recent wit
   window.close();
 });
 
+describe("a rail rebuild under an open popover", () => {
+  const marked = [{ cwd: "/work/alpha", label: "alpha", available: true, updatedAt: 30, color: "", icon: "" }];
+
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("leaves the menu alone when the host re-sends sessions", () => {
+    // The trigger is not rare and not the rail's own doing: the host re-sends
+    // sessions whenever their files change, and another extension writing its
+    // transcripts drives that every second or two.
+    const { window, doc } = bootRail();
+    const api = railApi(window);
+    api.onMessage({ type: "repos", entries: marked, cwd: "/work/alpha" });
+    expect(openProjectMenu(doc, window, "alpha")).not.toBe(null);
+    loadSessions(api, [row("s1", "/work/alpha", "one")]);
+    expect(
+      doc.querySelector(".rail-menu"),
+      "a session refresh closed the menu -- it does that every second or two",
+    ).not.toBe(null);
+  });
+
+  it("holds the icon picker up, then lands the frame it deferred", async () => {
+    // A rename is the observable here because it is unconditional: a project
+    // row is always drawn, where a session row needs its project expanded and
+    // would make "nothing changed" pass for the wrong reason.
+    const { window, doc } = bootRail();
+    const api = railApi(window);
+    api.onMessage({ type: "repos", entries: marked, cwd: "/work/alpha" });
+    const menu = openProjectMenu(doc, window, "alpha");
+    (menuItem(menu, "Set icon") as HTMLElement).click();
+    expect(doc.querySelector(".repo-icon-picker")).not.toBe(null);
+
+    api.onMessage({
+      type: "repos",
+      entries: [{ ...marked[0], label: "renamed" }],
+      cwd: "/work/alpha",
+    });
+    expect(doc.querySelector(".repo-icon-picker"), "a refresh closed the picker").not.toBe(null);
+    // Deferred, not dropped.
+    expect(repoLabels(doc)).toEqual(["alpha"]);
+
+    // Closing it is what lets the frame through, and the frame that lands is
+    // the newest state rather than the one that was held.
+    (doc.querySelector('.repo-icon-cell[data-icon="rocket"]') as HTMLElement).click();
+    await tick();
+    expect(doc.querySelector(".repo-icon-picker")).toBe(null);
+    expect(
+      repoLabels(doc),
+      "the deferred frame never landed -- the rail is frozen",
+    ).toEqual(["renamed"]);
+  });
+});
+
 function openProjectMenu(doc: Document, window: Window, repoLabel: string) {
   const labels = [...doc.querySelectorAll(".rail-repo-label")];
   const labelEl = labels.find((e) => e.textContent === repoLabel);
